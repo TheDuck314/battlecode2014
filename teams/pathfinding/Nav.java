@@ -79,10 +79,18 @@ public class Nav {
     }
 
     private static void bugTurn() throws GameActionException {
+        Debug.indicate("bug", 0, String.format(
+                "bugTurn start: wallSide = %s, startDistSq = %d, currentDistSq = %d, lastMoveDir = %s, lookStartDir = %s, rotationCount = %d",
+                bugWallSide.toString(), bugStartDistSq, rc.getLocation().directionTo(dest), bugLastMoveDir.toString(), bugLookStartDir.toString(),
+                bugRotationCount));
         Direction dir = findBugMoveDir();
         if (dir != null) {
             bugMove(dir);
         }
+        Debug.indicate("bug", 1, String.format(
+                "bugTurn end: wallSide = %s, startDistSq = %d, currentDistSq = %d, lastMoveDir = %s, lookStartDir = %s, rotationCount = %d",
+                bugWallSide.toString(), bugStartDistSq, rc.getLocation().directionTo(dest), bugLastMoveDir.toString(), bugLookStartDir.toString(),
+                bugRotationCount));
     }
 
     private static boolean canEndBug() {
