@@ -1,0 +1,16 @@
+.installationinformation
+AllowedPackages.txt
+DisallowedClasses.txt
+MethodCosts.txt
+Uninstaller/
+art/
+bc.conf
+bin/
+build.xml
+doc/
+lib/
+maps/
+music/
+sound/
+version.txt
+teams/examplefuncsplayer/
