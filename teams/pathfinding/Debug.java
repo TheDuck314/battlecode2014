@@ -1,6 +1,6 @@
 package pathfinding;
 
-import battlecode.common.RobotController;
+import battlecode.common.*;
 
 public class Debug {
     private static RobotController rc;
@@ -13,7 +13,13 @@ public class Debug {
     
     public static void indicate(String debugSet, int indicator, String message) {
         if(debugSet == activeDebugSet) {
-            rc.setIndicatorString(indicator, message);
+            rc.setIndicatorString(indicator, String.format("turn %d: %s", Clock.getRoundNum(), message));
         }
+    }
+    
+    public static void clear() {
+    	rc.setIndicatorString(0, "");
+    	rc.setIndicatorString(1, "");
+    	rc.setIndicatorString(2, "");
     }
 }
