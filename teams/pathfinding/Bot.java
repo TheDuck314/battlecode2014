@@ -15,8 +15,8 @@ public abstract class Bot {
 		
 		ourHQ = rc.senseHQLocation();
 		theirHQ = rc.senseEnemyHQLocation();
-
-		Debug.init(theRC, "bug");
+		
+		FastRandom.init();
 	}
 
 	void updateData() {

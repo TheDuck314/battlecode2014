@@ -14,3 +14,4 @@ sound/
 version.txt
 teams/examplefuncsplayer/
 map editor/
+.gitignore~
