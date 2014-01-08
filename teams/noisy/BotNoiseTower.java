@@ -16,7 +16,6 @@ public class BotNoiseTower extends Bot {
 	double rate = 2.0/9.0;
 	
 	public void herdInward() throws GameActionException {
-		
 		radius = 20 - Math.min(13, (Clock.getRoundNum() % 120)*16.0/120.0);
 		
 		MapLocation target = new MapLocation((int)(here.x + radius*Math.cos(angle)), (int)(here.y + radius*Math.sin(angle)));

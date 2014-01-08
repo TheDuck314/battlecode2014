@@ -7,9 +7,23 @@ public class BotHQ extends Bot {
 		super(theRC);
 	}
 
+	int maxBots = 0;
+	int maxSpawnDelay = 0;
+	
 	public void turn() throws GameActionException {
-		if (!rc.isActive()) return;
-
+        maxSpawnDelay--;
+        if(maxSpawnDelay <= 0) {
+            maxBots++;
+            maxSpawnDelay = (int)(GameConstants.HQ_SPAWN_DELAY_CONSTANT_1 + Math.pow(maxBots, GameConstants.HQ_SPAWN_DELAY_CONSTANT_2));
+        }
+        rc.setIndicatorString(0, String.format("turn %d: maxBots = %d; spawn delay = %d", Clock.getRoundNum(), maxBots, maxSpawnDelay));
+        
+        if (!rc.isActive()) return;
+		
+		for(RobotType type : RobotType.values()) {
+		    System.out.format("%s: sense range^2 = %d; attack range^2 = %d\n", type.toString(), type.sensorRadiusSquared, type.attackRadiusMaxSquared);
+		}
+        
 		if (attackEnemies()) return;
 		spawnSoldier();
 	}
