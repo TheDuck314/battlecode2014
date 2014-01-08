@@ -34,6 +34,7 @@ public class Nav {
     }
 
     private static void startBug() {
+    	bugWallSide = WallSide.RIGHT;
         bugStartDistSq = rc.getLocation().distanceSquaredTo(dest);
         bugLastMoveDir = rc.getLocation().directionTo(dest);
         bugLookStartDir = rc.getLocation().directionTo(dest);
@@ -67,8 +68,8 @@ public class Nav {
 
     private static void bugMove(Direction dir) throws GameActionException {
         rc.move(dir);
-        bugLastMoveDir = dir;
         bugRotationCount += calculateBugRotation(dir);
+        bugLastMoveDir = dir;
         if (dir.isDiagonal()) {
             if (bugWallSide == WallSide.LEFT) bugLookStartDir = dir.rotateLeft().rotateLeft().rotateLeft();
             else bugLookStartDir = dir.rotateRight().rotateRight().rotateRight();
@@ -79,9 +80,12 @@ public class Nav {
     }
 
     private static void bugTurn() throws GameActionException {
-        Debug.indicate("bug", 0, String.format(
+        //System.out.println("bugWallSide = " + bugWallSide);
+        //System.out.println("bugLastMoveDir = " + bugLastMoveDir);
+        //System.out.println("bugLookStartDir = " + bugLookStartDir);
+    	if(bugWallSide != null) Debug.indicate("bug", 0, String.format(
                 "bugTurn start: wallSide = %s, startDistSq = %d, currentDistSq = %d, lastMoveDir = %s, lookStartDir = %s, rotationCount = %d",
-                bugWallSide.toString(), bugStartDistSq, rc.getLocation().directionTo(dest), bugLastMoveDir.toString(), bugLookStartDir.toString(),
+                bugWallSide.toString(), bugStartDistSq, rc.getLocation().distanceSquaredTo(dest), bugLastMoveDir.toString(), bugLookStartDir.toString(),
                 bugRotationCount));
         Direction dir = findBugMoveDir();
         if (dir != null) {
@@ -89,20 +93,16 @@ public class Nav {
         }
         Debug.indicate("bug", 1, String.format(
                 "bugTurn end: wallSide = %s, startDistSq = %d, currentDistSq = %d, lastMoveDir = %s, lookStartDir = %s, rotationCount = %d",
-                bugWallSide.toString(), bugStartDistSq, rc.getLocation().directionTo(dest), bugLastMoveDir.toString(), bugLookStartDir.toString(),
+                bugWallSide.toString(), bugStartDistSq, rc.getLocation().distanceSquaredTo(dest), bugLastMoveDir.toString(), bugLookStartDir.toString(),
                 bugRotationCount));
     }
 
     private static boolean canEndBug() {
-        return rc.getLocation().distanceSquaredTo(dest) <= bugStartDistSq && bugRotationCount <= 0;
+        return bugRotationCount <= 0 || rc.getLocation().distanceSquaredTo(dest) <= bugStartDistSq;
     }
-
-    public static void init(RobotController theRC) {
-        rc = theRC;
-    }
-
-    public static void goTo(MapLocation theDest) throws GameActionException {
-        if (theDest != dest) {
+    
+    private static void bugTo(MapLocation theDest) throws GameActionException {
+    	if (theDest != dest) {
             bugState = BugState.DIRECT;
             dest = theDest;
         }
@@ -126,5 +126,13 @@ public class Nav {
         if (bugState == BugState.BUG) {
             bugTurn();
         }
+    }
+
+    public static void init(RobotController theRC) {
+        rc = theRC;
+    }
+
+    public static void goTo(MapLocation theDest) throws GameActionException {
+        
     }
 }

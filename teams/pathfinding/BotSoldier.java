@@ -5,6 +5,7 @@ import battlecode.common.*;
 public class BotSoldier extends Bot {
 	public BotSoldier(RobotController theRC) {
 		super(theRC);
+		Debug.init(theRC, "bug");
 		Nav.init(theRC);
 	}
 
