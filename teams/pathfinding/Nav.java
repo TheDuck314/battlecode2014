@@ -159,6 +159,8 @@ public class Nav {
 
 		if (!rc.isActive()) return;
 
+		if (rc.getLocation().equals(dest)) return;
+
 		bugTo(theDest);
 	}
 }
