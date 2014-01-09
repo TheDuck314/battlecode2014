@@ -33,10 +33,10 @@ public abstract class Bot {
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
-			if (Clock.getRoundNum() != turn) {
-				System.out.println("!!!!!!!! WENT OVER BYTECODE LIMIT !!!!!!!");
-				throw new Exception("Fix your bytecodes");
-			}
+			//if (Clock.getRoundNum() != turn) {
+			//	System.out.println("!!!!!!!! WENT OVER BYTECODE LIMIT !!!!!!!");
+			//	throw new Exception("Fix your bytecodes");
+			//}
 			rc.yield();
 		}
 	}

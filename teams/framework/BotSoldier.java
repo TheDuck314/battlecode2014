@@ -25,7 +25,10 @@ public class BotSoldier extends Bot {
 
 		Debug.indicate("frame", 0, "state = " + state.toString());
 
-		if (mercyKillPastrs()) return;
+		if(Clock.getRoundNum() == 0) rc.construct(RobotType.PASTR);
+		else rc.construct(RobotType.NOISETOWER);
+		
+/*		if (mercyKillPastrs()) return;
 		if (fight()) return;
 
 		switch (state) {
@@ -37,7 +40,7 @@ public class BotSoldier extends Bot {
 				MapLocation rallyPoint = new MapLocation((3 * ourHQ.x + theirHQ.x) / 4, (3 * ourHQ.y + theirHQ.y) / 4);
 				Nav.goTo(rallyPoint);
 				break;
-		}
+		}*/
 	}
 
 	private void chooseInitialState() {

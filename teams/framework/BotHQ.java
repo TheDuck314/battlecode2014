@@ -25,7 +25,7 @@ public class BotHQ extends Bot {
 	}
 
 	boolean spawnSoldier() throws GameActionException {
-		if (rc.senseRobotCount() >= GameConstants.MAX_ROBOTS) return false;
+		if (rc.senseRobotCount() >= 2 /*GameConstants.MAX_ROBOTS*/) return false;
 
 		Direction dir = ourHQ.directionTo(theirHQ);
 		for (int i = 8; i-- > 0;) {
