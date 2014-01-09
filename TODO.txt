@@ -1,0 +1,3 @@
+--When rallying to a given location, bug will try to path around the swarm, which is bad. FIX!
+
+

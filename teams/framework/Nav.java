@@ -154,7 +154,16 @@ public class Nav {
 	public static void goTo(MapLocation theDest) throws GameActionException {
 		if (!theDest.equals(dest)) {
 			bugState = BugState.DIRECT;
-			dest = theDest;			
+			dest = theDest;					
+		}
+		
+		if(rc.getLocation().distanceSquaredTo(dest) <= 2) {
+			Direction dir = rc.getLocation().directionTo(dest);
+			if(rc.canMove(dir)) {
+				rc.move(dir); 
+			} else {
+				return;
+			}
 		}
 
 		if (!rc.isActive()) return;
