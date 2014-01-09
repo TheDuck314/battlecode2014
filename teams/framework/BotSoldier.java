@@ -25,8 +25,8 @@ public class BotSoldier extends Bot {
 
 		Debug.indicate("frame", 0, "state = " + state.toString());
 
-		if(Clock.getRoundNum() == 0) rc.construct(RobotType.PASTR);
-		else rc.construct(RobotType.NOISETOWER);
+		if(Clock.getRoundNum() == 0) rc.construct(RobotType.NOISETOWER);
+		else rc.construct(RobotType.PASTR);
 		
 /*		if (mercyKillPastrs()) return;
 		if (fight()) return;

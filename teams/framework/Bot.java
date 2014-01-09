@@ -17,13 +17,13 @@ public abstract class Bot {
 		theirHQ = rc.senseEnemyHQLocation();
 		
 		FastRandom.init();
+		Debug.init(rc, "pop");
 	}
-
+	
 	void updateData() {
 		here = rc.getLocation();
-
 	}
-
+	
 	public void loop() throws Exception {
 		while (true) {
 			int turn = Clock.getRoundNum();
