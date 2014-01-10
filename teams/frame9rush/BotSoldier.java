@@ -1,4 +1,4 @@
-package framework;
+package frame9rush;
 
 import battlecode.common.*;
 
@@ -21,23 +21,6 @@ public class BotSoldier extends Bot {
 		if (attackTarget != null) {
 			Nav.goTo(attackTarget, Nav.Sneak.NO);
 			return;
-		}
-
-		if (tryBuildNoiseTower()) return;
-
-		MapLocation pastr = MessageBoard.BEST_PASTR_LOC.readMapLocation(rc);
-		if (pastr != null) {
-			if (here.equals(pastr)) {
-				if (rc.isActive()) {
-					rc.construct(RobotType.PASTR);
-					return;
-				}
-			} else {
-				MapLocation[] ourPastrs = rc.sensePastrLocations(us);
-				Nav.Sneak sneak = ourPastrs.length > 0 && here.distanceSquaredTo(ourPastrs[0]) <= 30 ? Nav.Sneak.YES : Nav.Sneak.NO;
-				Nav.goTo(pastr, sneak);
-				return;
-			}
 		}
 	}
 

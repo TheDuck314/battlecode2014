@@ -1,4 +1,4 @@
-package framework;
+package frame9rush;
 
 import battlecode.common.*;
 

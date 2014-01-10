@@ -1,4 +1,4 @@
-package framework;
+package frame9rush;
 
 import battlecode.common.*;
 
@@ -201,9 +201,9 @@ public class Nav {
 
 		if (here.equals(theDest)) return;
 
-		if (bfsPlan[here.x][here.y] == null) {
-			bfsBuildPlan();
-		}
+		//if (bfsPlan[here.x][here.y] == null) {
+		//	bfsBuildPlan();
+		//}
 
 		if (!rc.isActive()) return;
 

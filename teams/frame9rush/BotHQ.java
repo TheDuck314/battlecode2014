@@ -1,4 +1,4 @@
-package framework;
+package frame9rush;
 
 import battlecode.common.*;
 
@@ -98,29 +98,9 @@ public class BotHQ extends Bot {
 	}
 
 	private void directStrategy() throws GameActionException {
-		// Decided whether to trigger attack mode
-		if (!attackModeTriggered) {
-			// if the enemy has overextended himself building pastrs, attack!
-			// The threshold to attack should be smaller on a smaller map because
-			// it will take less time to get there, so the opponent will have less time to
-			// mend his weakness.
-			if (numEnemyPastrs >= 2) {
-				int attackThreshold = 1 + (int) (hqSeparation / 40);
-				if (numAlliedSoldiers - maxEnemySoldiers >= attackThreshold) {
-					attackModeTriggered = true;
-				}
-			}
-			
-			// if the enemy is out-milking us, then we need to attack or we are going to lose
-			if (theirMilk >= 0.4 * GameConstants.WIN_QTY && theirMilk > ourMilk) {
-				attackModeTriggered = true;
-			}
-		}
-		
-		if(attackModeTriggered) {
-			MapLocation targetPastr = Util.closest(theirPastrs, ourHQ);
-			MessageBoard.ATTACK_LOC.writeMapLocation(targetPastr, rc);
-		} 
+		MapLocation attackTarget = Util.closest(theirPastrs, ourHQ);
+		if (attackTarget == null || Clock.getRoundNum() < 250) attackTarget = new MapLocation(rc.getMapWidth()/2, rc.getMapHeight()/2);
+		MessageBoard.ATTACK_LOC.writeMapLocation(attackTarget, rc);
 	}
 
 	// TODO: this takes a little too long on
