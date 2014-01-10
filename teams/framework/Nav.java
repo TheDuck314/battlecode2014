@@ -21,8 +21,6 @@ public class Nav {
 	private static Direction bugLookStartDir;
 	private static int bugRotationCount;
 
-	private static String actions;
-
 	private static boolean tryMoveDirect() throws GameActionException {
 		Direction toDest = rc.getLocation().directionTo(dest);
 		Direction[] tryDirs = new Direction[] { toDest, toDest.rotateLeft(), toDest.rotateRight() };
@@ -95,23 +93,13 @@ public class Nav {
 	}
 
 	private static void bugTurn() throws GameActionException {
-		if (bugWallSide != null) Debug.indicate("bug", 0, String.format(
-				"bugTurn start: wallSide = %s, startDistSq = %d, currentDistSq = %d, lastMoveDir = %s, lookStartDir = %s, rotationCount = %d",
-				bugWallSide.toString(), bugStartDistSq, rc.getLocation().distanceSquaredTo(dest), bugLastMoveDir.toString(), bugLookStartDir.toString(),
-				bugRotationCount));
 		if (detectBugIntoEdge()) {
-			actions += " reversed on hitting edge;";
 			reverseBugWallFollowDir();
 		}
 		Direction dir = findBugMoveDir();
 		if (dir != null) {
-			actions += " bugMove;";
 			bugMove(dir);
 		}
-		Debug.indicate("bug", 1, String.format(
-				"bugTurn end: wallSide = %s, startDistSq = %d, currentDistSq = %d, lastMoveDir = %s, lookStartDir = %s, rotationCount = %d",
-				bugWallSide.toString(), bugStartDistSq, rc.getLocation().distanceSquaredTo(dest), bugLastMoveDir.toString(), bugLookStartDir.toString(),
-				bugRotationCount));
 	}
 
 	private static boolean canEndBug() {
@@ -119,19 +107,14 @@ public class Nav {
 	}
 
 	private static void bugTo(MapLocation theDest) throws GameActionException {
-		actions = "starting bugTo in state " + bugState.toString() + ";";
-
 		// Check if we can stop bugging at the *beginning* of the turn
 		if (bugState == BugState.BUG && canEndBug()) {
-			actions += " ended bugging;";
 			bugState = BugState.DIRECT;
 		}
 
 		// If DIRECT mode, try to go directly to target
 		if (bugState == BugState.DIRECT) {
-			actions += " tried direct move;";
 			if (!tryMoveDirect()) {
-				actions += " started bugging;";
 				bugState = BugState.BUG;
 				startBug();
 			}
@@ -139,11 +122,8 @@ public class Nav {
 
 		// If that failed, or if bugging, bug
 		if (bugState == BugState.BUG) {
-			actions += "bugTurn";
 			bugTurn();
 		}
-
-		Debug.indicate("bug", 2, "bug actions: " + actions);
 	}
 
 	// Set up the queue
@@ -175,7 +155,7 @@ public class Nav {
 		int[] dirsX = new int[] { 1, 1, -1, -1, 0, 1, 0, -1 };
 		int[] dirsY = new int[] { 1, -1, -1, 1, 1, 0, -1, 0 };
 
-		while (bfsQueueHead != bfsQueueTail && Clock.getBytecodeNum() < 9000) {
+		while (bfsQueueHead != bfsQueueTail && Clock.getBytecodeNum() < 8500) {
 			// pop a location from the queue
 			MapLocation loc = bfsQueue[bfsQueueHead];
 			bfsQueueHead++;
@@ -222,8 +202,10 @@ public class Nav {
 
 		Direction dir = bfsPlan[here.x][here.y];
 		if (dir != null && rc.canMove(dir)) {
+			Debug.indicate("nav", 0, "using bfs");
 			rc.move(dir);
 		} else {
+			Debug.indicate("nav", 0, "using bug");
 			bugTo(dest);
 		}
 

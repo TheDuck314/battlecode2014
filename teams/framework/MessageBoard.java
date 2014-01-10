@@ -4,7 +4,7 @@ import battlecode.common.*;
 
 public enum MessageBoard {
 	BEST_PASTR_LOC(GameConstants.BROADCAST_MAX_CHANNELS - 1),
-	ATTACK_LOC(GameConstants.BROADCAST_MAX_CHANNELS - 1);
+	ATTACK_LOC(GameConstants.BROADCAST_MAX_CHANNELS - 2);
 
 	private final int channel;
 

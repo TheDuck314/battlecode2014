@@ -6,10 +6,12 @@ public class BotHQ extends Bot {
 	public BotHQ(RobotController theRC) {
 		super(theRC);
 
+		hqSeparation = Math.sqrt(ourHQ.distanceSquaredTo(theirHQ));
 		cowGrowth = rc.senseCowGrowth();
 	}
 
 	// Strategic info
+	double hqSeparation;
 	int virtualSpawnCountdown = 0;
 	int maxEnemySpawns;
 	int numEnemyPastrs;
@@ -17,12 +19,52 @@ public class BotHQ extends Bot {
 	int numAlliedPastrs;
 	int numAlliedSoldiers;
 	int numAlliedNoiseTowers;
-	MapLocation[] theirPastrs;
-	MapLocation[] ourPastrs;
 	double ourMilk;
 	double theirMilk;
 
 	boolean attackModeTriggered = false;
+
+	MapLocation[] theirPastrs;
+	MapLocation[] ourPastrs;
+
+	// Used for pastr placement
+	double[][] cowGrowth;
+	double[][] computedPastrScores = null;
+	MapLocation computedBestPastrLocation = null;
+
+	public void turn() throws GameActionException {
+		updateStrategicInfo();
+
+		// First turn gets special treatment: spawn then do a bunch of computation
+		// (which we devoutly hope will finished before the spawn timer is up
+		// and before anyone attacks us).
+		if (Clock.getRoundNum() == 0) {
+			doFirstTurn();
+			return;
+		}
+
+		if (rc.isActive()) {
+			spawnSoldier();
+		}
+
+		attackEnemies();
+
+		directStrategy();
+	}
+
+	private void doFirstTurn() throws GameActionException {
+		initMessageBoard();
+		spawnSoldier();
+
+		computePastrScores();
+		computeBestPastrLocation();
+		MessageBoard.BEST_PASTR_LOC.writeMapLocation(computedBestPastrLocation, rc);
+	}
+
+	private void initMessageBoard() throws GameActionException {
+		MessageBoard.BEST_PASTR_LOC.writeMapLocation(null, rc);
+		MessageBoard.ATTACK_LOC.writeMapLocation(null, rc);
+	}
 
 	// Guess how many bots the opponent has
 	// TODO: account for pop cap
@@ -54,56 +96,59 @@ public class BotHQ extends Bot {
 		theirMilk = rc.senseTeamMilkQuantity(them);
 	}
 
-	public void turn() throws GameActionException {
-		updateStrategicInfo();
-
-		if (Clock.getRoundNum() == 0) {
-			MessageBoard.BEST_PASTR_LOC.writeMapLocation(null, rc);
+	private void directStrategy() throws GameActionException {
+		// Decided whether to trigger attack mode
+		if (!attackModeTriggered) {
+			// if the enemy has overextended himself building pastrs, attack!
+			// The threshold to attack should be smaller on a smaller map because
+			// it will take less time to get there, so the opponent will have less time to
+			// mend his weakness.
+			if (numEnemyPastrs >= 2) {
+				int attackThreshold = 1 + (int) (hqSeparation / 40);
+				if (numAlliedSoldiers - maxEnemySoldiers >= attackThreshold) {
+					attackModeTriggered = true;
+				}
+			}
+			
+			// if the enemy is out-milking us, then we need to attack or we are going to lose
+			if (theirMilk >= 0.4 * GameConstants.WIN_QTY && theirMilk > ourMilk) {
+				attackModeTriggered = true;
+			}
 		}
-
-		if (rc.isActive()) {
-			if (attackEnemies()) return;
-			spawnSoldier();
-		}
+		
+		if(attackModeTriggered) {
+			MapLocation targetPastr = Util.closest(theirPastrs, ourHQ);
+			MessageBoard.ATTACK_LOC.writeMapLocation(targetPastr, rc);
+		} 
 	}
 
-	private double[][] cowGrowth;
-	private double[][] computedPastrScores = null;
-	private MapLocation computedBestPastrLocation = null;
-
+	// TODO: this takes a little too long on
 	private void computePastrScores() {
 		int mapWidth = rc.getMapWidth();
 		int mapHeight = rc.getMapHeight();
 
-		int[] yOffsets = new int[] { 2, 2, 2, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1, -2, -2, -2 };
-		int[] xOffsets = new int[] { -1, 0, 1, -2, -1, 0, 1, 2, -2, -1, 0, 1, 2, -2, -1, 0, 1, 2, -1, 0, 1 };
-
 		double[][] pastrScores = new double[mapWidth][mapHeight];
-		for (int x = mapWidth; x-- > 0;) {
-			for (int y = mapHeight; y-- > 0;) {
-				if (cowGrowth[x][y] > 0) {
-					if (rc.senseTerrainTile(new MapLocation(x, y)) != TerrainTile.VOID) {
-						for (int i = xOffsets.length; i-- > 0;) {
-							int pX = x + xOffsets[i];
-							int pY = y + yOffsets[i];
-							if (pX > 0 && pY > 0 && pX < mapWidth && pY < mapHeight) {
-								pastrScores[pX][pY] += cowGrowth[x][y];
+		for (int x = 2; x < mapWidth - 2; x += 5) {
+			for (int y = 2; y < mapHeight - 2; y += 5) {
+				if (rc.senseTerrainTile(new MapLocation(x, y)) != TerrainTile.VOID) {
+					MapLocation loc = new MapLocation(x, y);
+					double distDiff = Math.sqrt(loc.distanceSquaredTo(theirHQ)) - Math.sqrt(loc.distanceSquaredTo(ourHQ));
+					if (distDiff > 10) {
+						pastrScores[x][y] = distDiff * 0.5;
+						for (int cowX = x - 2; cowX <= x + 2; cowX++) {
+							for (int cowY = y - 2; cowY <= y + 2; cowY++) {
+								if (rc.senseTerrainTile(new MapLocation(cowX, cowY)) != TerrainTile.VOID) {
+									pastrScores[x][y] += cowGrowth[cowX][cowY];
+								}
 							}
 						}
 					} else {
-						pastrScores[x][y] -= 999999; // make it so we don't make pastrs on void squares
+						pastrScores[x][y] -= 999999; // only make pastrs on squares closer to our HQ than theirs
 					}
+				} else {
+					pastrScores[x][y] -= 999999; // don't make pastrs on void squares
 				}
-				pastrScores[x][y] -= Math.sqrt(ourHQ.distanceSquaredTo(new MapLocation(x, y)));
 			}
-		}
-
-		for (int y = 0; y < mapHeight; y++) {
-			for (int x = 0; x < mapWidth; x++) {
-				if (pastrScores[x][y] < -999) System.out.format("XX ");
-				else System.out.format("%03d ", (int) pastrScores[x][y]);
-			}
-			System.out.println();
 		}
 
 		computedPastrScores = pastrScores;
@@ -115,38 +160,19 @@ public class BotHQ extends Bot {
 
 		int mapWidth = rc.getMapWidth();
 		int mapHeight = rc.getMapHeight();
-		for (int x = mapWidth; x-- > 0;) {
-			for (int y = mapHeight; y-- > 0;) {
+		for (int x = 2; x < mapWidth - 2; x += 5) {
+			for (int y = 2; y < mapHeight - 2; y += 5) {
 				if (computedPastrScores[x][y] > bestPastrScore) {
-					bestPastrScore = computedPastrScores[x][y];
-					bestPastrLocation = new MapLocation(x, y);
+					MapLocation loc = new MapLocation(x, y);
+					if (!Util.contains(ourPastrs, new MapLocation(x, y))) {
+						bestPastrScore = computedPastrScores[x][y];
+						bestPastrLocation = loc;
+					}
 				}
 			}
 		}
 
 		computedBestPastrLocation = bestPastrLocation;
-		System.out.println("bestPastrLocation = " + bestPastrLocation.toString());
-	}
-
-	private void adjustPastrScores(MapLocation existingPastr) {
-		int mapWidth = rc.getMapWidth();
-		int mapHeight = rc.getMapHeight();
-		int[] yOffsets = new int[] { 2, 2, 2, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1, -2, -2, -2 };
-		int[] xOffsets = new int[] { -1, 0, 1, -2, -1, 0, 1, 2, -2, -1, 0, 1, 2, -2, -1, 0, 1, 2, -1, 0, 1 };
-
-		for (int i = xOffsets.length; i-- > 0;) {
-			int x1 = existingPastr.x + xOffsets[i];
-			int y1 = existingPastr.y + yOffsets[i];
-			if (x1 > 0 && y1 > 0 && x1 < mapWidth && y1 < mapHeight) {
-				for (int j = xOffsets.length; j-- > 0;) {
-					int x2 = x1 + xOffsets[j];
-					int y2 = y1 + yOffsets[j];
-					if (x2 > 0 && y2 > 0 && x2 < mapWidth && y2 < mapHeight) {
-						computedPastrScores[x2][y2] -= cowGrowth[x1][y1];
-					}
-				}
-			}
-		}
 	}
 
 	private boolean attackEnemies() throws GameActionException {

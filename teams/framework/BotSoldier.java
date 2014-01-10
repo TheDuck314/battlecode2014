@@ -5,7 +5,7 @@ import battlecode.common.*;
 public class BotSoldier extends Bot {
 	public BotSoldier(RobotController theRC) {
 		super(theRC);
-		Debug.init(theRC, "path");
+		Debug.init(theRC, "nav");
 		Nav.init(theRC);
 	}
 
@@ -14,7 +14,24 @@ public class BotSoldier extends Bot {
 			if (fight()) return;
 		}
 
-		// do stuff
+		MapLocation attackTarget = MessageBoard.ATTACK_LOC.readMapLocation(rc);
+		if (attackTarget != null) {
+			Nav.goTo(attackTarget);
+			Debug.indicate("attackmode", 0, "in attackmode! attack loc = " + attackTarget.toString());
+		} else {
+			Debug.indicate("attackmode", 0, "not in attackmode!");
+			MapLocation pastr = MessageBoard.BEST_PASTR_LOC.readMapLocation(rc);
+			if (pastr != null) {
+				Debug.indicate("attackmode", 0, "pastr != null");
+				if (here.equals(pastr)) {
+					if (rc.isActive()) rc.construct(RobotType.PASTR);
+				} else {
+					Nav.goTo(pastr);
+				}
+			} else {
+				Debug.indicate("attackmode", 0, "pastr is null");
+			}
+		}
 	}
 
 	private boolean fight() throws GameActionException {

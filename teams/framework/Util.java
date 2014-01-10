@@ -13,7 +13,7 @@ public class Util {
 		for (int i = locs.length; i-- > 0;) {
 			int distSq = locs[i].distanceSquaredTo(to);
 			if (distSq < bestDistSq) {
-				distSq = bestDistSq;
+				bestDistSq = distSq;
 				ret = locs[i];
 			}
 		}
