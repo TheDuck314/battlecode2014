@@ -1,0 +1,34 @@
+team117 - Fragments of a Hologram Rose
+   with framework-1-9: they built all pastrs early, I punished them and won
+
+team056 - baumteam
+   with framework-1-9: they try to use soldiers to herd into pastrs next to HQ
+                       they synchronize the herding of a bunch of soldier.
+                       it didn't work well, so I won with a single well-placed pastr
+
+team225 - The Simple Soldier
+   with framework-1-9: they built too many pastrs, and I punished them and won
+   
+team133 - Proxy 2 Gate
+   INTERESTING STAND-OFFISH MICRO: WATCH MATCH 292; MIGHT BE SLIGHTLY BETTER THAN MINE
+   with framework-1-9: (match 292) G#1: they build 2 pastrs, I built 1,
+                                        all pastrs were destroyed, I rebuilt mine and wo
+                                   G#2: they neglected to build pastrs, so I won with 1.
+
+team009 - Noob Status
+   REALLY NICE BUG + ROAD HEURISTIC PATHFINDING. MAKES IT OBVIOUS THAT THE BFS IS SLOWING ME DOWN A LOT
+   NICE SOLDIER HERDING INTO CORNERS STRATEGY
+   with framework-1-9: (match 305) G#1: they built 2 pastrs in corners and used soldiers to herd into them
+                                        worked really well! I lost
+                                   G#2: he got confused b/c Reticle doesn't have corners, and I won
+                                   G#3: another open map; they herded into corners and won
+
+team052 - The Vegan Police
+   LESSON: WHEN I COMPLETELY ANNIHILATE THE ENEMY, DON'T LET HIM REBUILD
+   with framework-1-9: he has decent straight-line soldier herding. but I caught his herders one by one and annihilated them when I attacked
+
+team038 - FireAnts
+   NICE CIRCULAR HERDING STRATEGY (EACH SOLDIER HERDS 180 DEGREES AS IT ARRIVES), BUT WEAK TO ATTACKS
+
+team027 - Armada
+   DIDN'T BUILD PASTRS, ONLY ATTACKED MINE (ONE AT A TIME...)
