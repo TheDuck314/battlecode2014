@@ -115,8 +115,7 @@ public class Nav {
 	}
 
 	private static boolean canEndBug() {
-		return (bugRotationCount <= 0 || bugRotationCount >= 8) && 
-				rc.getLocation().distanceSquaredTo(dest) <= bugStartDistSq;
+		return (bugRotationCount <= 0 || bugRotationCount >= 8) && rc.getLocation().distanceSquaredTo(dest) <= bugStartDistSq;
 	}
 
 	private static void bugTo(MapLocation theDest) throws GameActionException {
@@ -147,29 +146,87 @@ public class Nav {
 		Debug.indicate("bug", 2, "bug actions: " + actions);
 	}
 
+	// Set up the queue
+	static MapLocation[] bfsQueue = new MapLocation[GameConstants.MAP_MAX_WIDTH * GameConstants.MAP_MAX_HEIGHT];
+	static int bfsQueueHead = 0;
+	static int bfsQueueTail = 0;
+	static Direction[][] bfsPlan = new Direction[GameConstants.MAP_MAX_WIDTH][GameConstants.MAP_MAX_HEIGHT];
+	static boolean[][] bfsWasQueued = new boolean[GameConstants.MAP_MAX_WIDTH][GameConstants.MAP_MAX_HEIGHT];
+
+	// Reset the BFS plan and initialize the BFS algorithm
+	static void bfsInit() {
+		bfsQueueHead = 0;
+		bfsQueueTail = 0;
+
+		bfsPlan = new Direction[GameConstants.MAP_MAX_WIDTH][GameConstants.MAP_MAX_HEIGHT];
+		bfsWasQueued = new boolean[GameConstants.MAP_MAX_WIDTH][GameConstants.MAP_MAX_HEIGHT];
+
+		// Push dest onto queue
+		bfsQueue[bfsQueueTail] = dest;
+		bfsQueueTail++;
+		bfsWasQueued[dest.x][dest.y] = true;
+	}
+
+	static void bfsBuildPlan() throws GameActionException {
+		int mapWidth = rc.getMapWidth();
+		int mapHeight = rc.getMapHeight();
+		Direction[] dirs = new Direction[] { Direction.NORTH_WEST, Direction.SOUTH_WEST, Direction.SOUTH_EAST, Direction.NORTH_EAST, Direction.NORTH,
+				Direction.WEST, Direction.SOUTH, Direction.EAST };
+		int[] dirsX = new int[] { 1, 1, -1, -1, 0, 1, 0, -1 };
+		int[] dirsY = new int[] { 1, -1, -1, 1, 1, 0, -1, 0 };
+
+		while (bfsQueueHead != bfsQueueTail && Clock.getBytecodeNum() < 9000) {
+			// pop a location from the queue
+			MapLocation loc = bfsQueue[bfsQueueHead];
+			bfsQueueHead++;
+
+			int locX = loc.x;
+			int locY = loc.y;
+			for (int i = 8; i-- > 0;) {
+				int x = locX + dirsX[i];
+				int y = locY + dirsY[i];
+				if (x > 0 && y > 0 && x < mapWidth && y < mapHeight && !bfsWasQueued[x][y]) {
+					MapLocation newLoc = new MapLocation(x, y);
+					if (rc.senseTerrainTile(newLoc) != TerrainTile.VOID) {
+						bfsPlan[x][y] = dirs[i];
+						// push newLoc onto queue
+						bfsQueue[bfsQueueTail] = newLoc;
+						bfsQueueTail++;
+						bfsWasQueued[x][y] = true;
+					}
+				}
+			}
+		}
+	}
+
 	public static void init(RobotController theRC) {
 		rc = theRC;
 	}
 
 	public static void goTo(MapLocation theDest) throws GameActionException {
 		if (!theDest.equals(dest)) {
+			dest = theDest;
 			bugState = BugState.DIRECT;
-			dest = theDest;					
+			bfsInit(); // reset the BFS plan
 		}
-		
-		if(rc.getLocation().distanceSquaredTo(dest) <= 2) {
-			Direction dir = rc.getLocation().directionTo(dest);
-			if(rc.canMove(dir)) {
-				rc.move(dir); 
-			} else {
-				return;
-			}
+
+		MapLocation here = rc.getLocation();
+
+		if (here.equals(theDest)) return; 
+
+		if (bfsPlan[here.x][here.y] == null) {
+			bfsBuildPlan();
 		}
 
 		if (!rc.isActive()) return;
 
-		if (rc.getLocation().equals(dest)) return;
+		Direction dir = bfsPlan[here.x][here.y];
+		if (dir != null && rc.canMove(dir)) {
+			rc.move(dir);
+		} else {
+			bugTo(dest);
+		}
 
-		bugTo(theDest);
 	}
+
 }

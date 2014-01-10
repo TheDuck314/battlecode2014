@@ -5,59 +5,16 @@ import battlecode.common.*;
 public class BotSoldier extends Bot {
 	public BotSoldier(RobotController theRC) {
 		super(theRC);
-		Debug.init(theRC, "bug");
+		Debug.init(theRC, "path");
 		Nav.init(theRC);
-
-		chooseInitialState();
 	}
-
-	private enum SoldierState {
-		MOVING_TO_PASTR_LOC, RALLYING
-	}
-
-	SoldierState state;
-
-	// MOVING_TO_PASTR_LOC
-	MapLocation buildPastrLoc;
 
 	public void turn() throws GameActionException {
-		if (!rc.isActive()) return;
-
-		Debug.indicate("frame", 0, "state = " + state.toString());
-
-		if(Clock.getRoundNum() == 0) rc.construct(RobotType.NOISETOWER);
-		else rc.construct(RobotType.PASTR);
-		
-/*		if (mercyKillPastrs()) return;
-		if (fight()) return;
-
-		switch (state) {
-			case MOVING_TO_PASTR_LOC:
-				moveToBuildPastrLoc();
-				break;
-
-			case RALLYING:
-				MapLocation rallyPoint = new MapLocation((3 * ourHQ.x + theirHQ.x) / 4, (3 * ourHQ.y + theirHQ.y) / 4);
-				Nav.goTo(rallyPoint);
-				break;
-		}*/
-	}
-
-	private void chooseInitialState() {
-		if (Clock.getRoundNum() == 0) {
-			state = SoldierState.MOVING_TO_PASTR_LOC;
-			buildPastrLoc = new MapLocation((3 * ourHQ.x + theirHQ.x) / 4, (3 * ourHQ.y + theirHQ.y) / 4);
-		} else {
-			state = SoldierState.RALLYING;
+		if (rc.isActive()) {
+			if (fight()) return;
 		}
-	}
 
-	private void moveToBuildPastrLoc() throws GameActionException {
-		if (here.equals(buildPastrLoc)) {
-			rc.construct(RobotType.PASTR);
-		} else {
-			Nav.goTo(buildPastrLoc);
-		}
+		// do stuff
 	}
 
 	private boolean fight() throws GameActionException {
@@ -88,17 +45,22 @@ public class BotSoldier extends Bot {
 	}
 
 	// Current attack strategy: prefer soldiers over pastrs over noise towers,
-	// and within a type attack the guy with the lowest health
+	// and within a type attack the guy with the lowest health, and break ties
+	// between equal health by firing on the target with smaller actionDelay
+	// TODO: test actiondealy tiebreaker
 	private MapLocation chooseAttackTarget(Robot[] enemies) throws GameActionException {
 		MapLocation ret = null;
 		double bestHealth = 999999;
+		double bestActionDelay = 999999;
 		RobotType bestType = RobotType.HQ;
 		for (int i = enemies.length; i-- > 0;) {
 			RobotInfo info = rc.senseRobotInfo(enemies[i]);
 			RobotType type = info.type;
-			if (betterAttackTarget(type, bestType)) {
+			if (isBetterAttackTarget(type, bestType)) {
 				double health = info.health;
-				if (health < bestHealth || type != bestType) {
+				double actionDelay = info.actionDelay;
+				if (type != bestType || health < bestHealth || (health == bestHealth && actionDelay < bestActionDelay)) {
+					bestActionDelay = actionDelay;
 					bestHealth = health;
 					bestType = type;
 					ret = info.location;
@@ -108,7 +70,8 @@ public class BotSoldier extends Bot {
 		return ret;
 	}
 
-	private boolean betterAttackTarget(RobotType a, RobotType b) {
+	// Whether type a is at least as good as type b for shooting at
+	private boolean isBetterAttackTarget(RobotType a, RobotType b) {
 		switch (a) {
 			case SOLDIER:
 				return true;
@@ -135,7 +98,7 @@ public class BotSoldier extends Bot {
 		for (int i = enemies.length; i-- > 0;) {
 			RobotInfo info = rc.senseRobotInfo(enemies[i]);
 			RobotType type = info.type;
-			if (betterAttackTarget(type, bestType)) {
+			if (isBetterAttackTarget(type, bestType)) {
 				if (type != RobotType.SOLDIER || isSafeToApproachSoldier(info.location)) {
 					double health = info.health;
 					double distSq = here.distanceSquaredTo(info.location);
@@ -150,33 +113,16 @@ public class BotSoldier extends Bot {
 		}
 		return ret;
 	}
-	
+
 	// Tells whether it's safe to walk into an enemy's attack range.
 	// Currently we say it's safe if there is already an ally within the enemy's
 	// attack range.
 	private boolean isSafeToApproachSoldier(MapLocation loc) throws GameActionException {
 		Robot[] allies = rc.senseNearbyGameObjects(Robot.class, loc, RobotType.SOLDIER.attackRadiusMaxSquared, us);
-		if(allies.length == 0) return false;
-		for(int i = allies.length; i --> 0; ) {
-			RobotInfo info = rc.senseRobotInfo(allies[i]);
-			if(info.type == RobotType.SOLDIER) return true; 
-		}
-		return false;
-	}
-
-	// If one of our pastrs is within our attack range and is about to die, kill it so that the
-	// other team doesn't get milk for it.
-	private boolean mercyKillPastrs() throws GameActionException {
-		Robot[] allies = rc.senseNearbyGameObjects(Robot.class, RobotType.SOLDIER.attackRadiusMaxSquared, us);
+		if (allies.length == 0) return false;
 		for (int i = allies.length; i-- > 0;) {
 			RobotInfo info = rc.senseRobotInfo(allies[i]);
-			if (info.type == RobotType.PASTR) {
-				Debug.indicate("mercy", 0, "pastr health = " + info.health);
-				if (info.health <= RobotType.SOLDIER.attackPower) {
-					rc.attackSquare(info.location);
-					return true;
-				}
-			}
+			if (info.type == RobotType.SOLDIER) return true;
 		}
 		return false;
 	}

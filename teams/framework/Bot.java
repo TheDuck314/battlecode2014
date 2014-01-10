@@ -12,35 +12,34 @@ public abstract class Bot {
 		rc = theRC;
 		us = rc.getTeam();
 		them = us.opponent();
-		
+
 		ourHQ = rc.senseHQLocation();
 		theirHQ = rc.senseEnemyHQLocation();
-		
+
 		FastRandom.init();
 		Debug.init(rc, "pop");
 	}
-	
+
 	void updateData() {
 		here = rc.getLocation();
 	}
-	
+
 	public void loop() throws Exception {
 		while (true) {
-			int turn = Clock.getRoundNum();
+			// int turn = Clock.getRoundNum();
 			try {
 				updateData();
 				turn();
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
-			//if (Clock.getRoundNum() != turn) {
-			//	System.out.println("!!!!!!!! WENT OVER BYTECODE LIMIT !!!!!!!");
-			//	throw new Exception("Fix your bytecodes");
-			//}
+			// if (Clock.getRoundNum() != turn) {
+			// System.out.println("!!!!!!!! WENT OVER BYTECODE LIMIT !!!!!!!");
+			// throw new Exception("Fix your bytecodes");
+			// }
 			rc.yield();
 		}
 	}
 
 	public abstract void turn() throws GameActionException;
 }
-

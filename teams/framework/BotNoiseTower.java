@@ -55,10 +55,6 @@ public class BotNoiseTower extends Bot {
 
 	}
 
-	private void debugBytecodes(String message) {
-		System.out.format("turn: %d, bytecodes: %d: %s\n", Clock.getRoundNum(), Clock.getBytecodeNum(), message);
-	}
-
 	// TODO: optimize lots
 	private void computePastrHerdPattern() {
 		// Useful data
