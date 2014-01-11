@@ -39,6 +39,7 @@ public class Bfs {
 
 		int mapWidth = rc.getMapWidth();
 		int mapHeight = rc.getMapHeight();
+		MapLocation enemyHQ = rc.senseEnemyHQLocation();
 
 		while (locQueueHead != locQueueTail && Clock.getBytecodeNum() < bytecodeLimit) {
 			// pop a location from the queue
@@ -52,7 +53,7 @@ public class Bfs {
 				int y = locY + dirsY[i];
 				if (x > 0 && y > 0 && x < mapWidth && y < mapHeight && !wasQueued[x][y]) {
 					MapLocation newLoc = new MapLocation(x, y);
-					if (rc.senseTerrainTile(newLoc) != TerrainTile.VOID) {
+					if (rc.senseTerrainTile(newLoc) != TerrainTile.VOID && enemyHQ.distanceSquaredTo(newLoc) > 25) {
 						publishResult(newLoc, dest, dirs[i], rc);
 
 						// push newLoc onto queue

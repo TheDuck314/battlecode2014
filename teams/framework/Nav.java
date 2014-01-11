@@ -7,6 +7,16 @@ public class Nav {
 	private static RobotController rc;
 	private static boolean sneak = false;
 
+	private static MapLocation enemyHQ; //we can't ever go too near the enemy HQ
+
+	private static boolean isNearTheirHQ(MapLocation loc) {
+		return enemyHQ.distanceSquaredTo(loc) <= 25;
+	}
+	
+	private static boolean canMoveSafely(Direction dir) {
+		return rc.canMove(dir) && !isNearTheirHQ(rc.getLocation().add(dir));
+	}
+	
 	private enum BugState {
 		DIRECT, BUG
 	}
@@ -15,10 +25,6 @@ public class Nav {
 		LEFT, RIGHT
 	}
 
-	public enum Sneak {
-		YES, NO
-	}
-	
 	private static BugState bugState;
 	private static WallSide bugWallSide = WallSide.LEFT;
 	private static int bugStartDistSq;
@@ -27,10 +33,11 @@ public class Nav {
 	private static int bugRotationCount;
 
 	private static boolean tryMoveDirect() throws GameActionException {
-		Direction toDest = rc.getLocation().directionTo(dest);
+		MapLocation here = rc.getLocation();
+		Direction toDest = here.directionTo(dest);
 		Direction[] tryDirs = new Direction[] { toDest, toDest.rotateLeft(), toDest.rotateRight() };
 		for (Direction tryDir : tryDirs) {
-			if (rc.canMove(tryDir)) {
+			if (canMoveSafely(tryDir)) {
 				move(tryDir);
 				return true;
 			}
@@ -48,7 +55,7 @@ public class Nav {
 	private static Direction findBugMoveDir() {
 		Direction dir = bugLookStartDir;
 		for (int i = 8; i-- > 0;) {
-			if (rc.canMove(dir)) return dir;
+			if (canMoveSafely(dir)) return dir;
 			dir = (bugWallSide == WallSide.LEFT ? dir.rotateRight() : dir.rotateLeft());
 		}
 		return null;
@@ -83,9 +90,9 @@ public class Nav {
 
 		if (bugLastMoveDir.isDiagonal()) {
 			if (bugWallSide == WallSide.LEFT) {
-				return !rc.canMove(bugLastMoveDir.rotateLeft());
+				return !canMoveSafely(bugLastMoveDir.rotateLeft());
 			} else {
-				return !rc.canMove(bugLastMoveDir.rotateRight());
+				return !canMoveSafely(bugLastMoveDir.rotateRight());
 			}
 		} else {
 			return true;
@@ -172,7 +179,7 @@ public class Nav {
 				int y = locY + dirsY[i];
 				if (x > 0 && y > 0 && x < mapWidth && y < mapHeight && !bfsWasQueued[x][y]) {
 					MapLocation newLoc = new MapLocation(x, y);
-					if (rc.senseTerrainTile(newLoc) != TerrainTile.VOID) {
+					if (rc.senseTerrainTile(newLoc) != TerrainTile.VOID && !isNearTheirHQ(newLoc)) {
 						bfsPlan[x][y] = dirs[i];
 						// push newLoc onto queue
 						bfsQueue[bfsQueueTail] = newLoc;
@@ -186,8 +193,13 @@ public class Nav {
 
 	public static void init(RobotController theRC) {
 		rc = theRC;
+		enemyHQ = rc.senseEnemyHQLocation();
 	}
 
+	public enum Sneak {
+		YES, NO
+	}
+	
 	public static void goTo(MapLocation theDest, Sneak theSneak) throws GameActionException {
 		sneak = (theSneak == Sneak.YES);
 
@@ -212,7 +224,7 @@ public class Nav {
 		// TODO: if we can't go in the desired direction, we need a better fallback than switching
 		// to bug. For example, go in the closest direction, or if there is no close direction then
 		// wait for 2-4 turns, or if that doesn't work, then bug
-		if (dir != null && rc.canMove(dir)) {
+		if (dir != null && canMoveSafely(dir)) {
 			Debug.indicate("nav", 0, "using bfs");
 			move(dir);
 		} else {
