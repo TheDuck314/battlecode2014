@@ -1,4 +1,4 @@
-package framework;
+package frame10rush;
 
 import battlecode.common.*;
 
@@ -51,7 +51,7 @@ public class BotHQ extends Bot {
 
 		attackEnemies();
 
-		directStrategyMacro();
+		directStrategyRush();
 
 		// Use spare bytecodes to do pathing computations
 		MapLocation pathingDest;

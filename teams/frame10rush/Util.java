@@ -1,4 +1,4 @@
-package framework;
+package frame10rush;
 
 import battlecode.common.*;
 
@@ -15,21 +15,6 @@ public class Util {
 			if (distSq < bestDistSq) {
 				bestDistSq = distSq;
 				ret = locs[i];
-			}
-		}
-		return ret;
-	}
-	
-	public static MapLocation closest(RobotInfo[] infos, MapLocation here) {
-		MapLocation ret = null;
-		int bestDistSq = 999999;
-		for(int i = infos.length; i --> 0; ) {
-			RobotInfo info = infos[i];
-			MapLocation loc = info.location;
-			int distSq = loc.distanceSquaredTo(here);
-			if(distSq < bestDistSq) {
-				bestDistSq = distSq;
-				ret = loc;
 			}
 		}
 		return ret;

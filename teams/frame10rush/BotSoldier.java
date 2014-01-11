@@ -1,4 +1,4 @@
-package framework;
+package frame10rush;
 
 import battlecode.common.*;
 
@@ -24,25 +24,19 @@ public class BotSoldier extends Bot {
 		// If we have an attack target, go to that target and kill things
 		MapLocation attackTarget = MessageBoard.ATTACK_LOC.readMapLocation(rc);
 
-		// Decide whether to behave aggressively or defensively. Only be aggressive if we are in attack mode
-		// and there is a decent number of allies around, or if we are in any mode and we have a big numbers advantage
 		MicroStance stance;
-		if (visibleEnemies.length == 0) {
-			stance = MicroStance.AGGRESSIVE; // stance doesn't matter if there are no enemies
+		if (attackTarget == null) {
+			stance = MicroStance.DEFENSIVE;
 		} else {
-			int numAllies = 1; // us
-			numAllies += Math.max(numOtherAlliedSoldiersInRange(here, RobotType.SOLDIER.sensorRadiusSquared),
-					numOtherAlliedSoldiersInRange(Util.closest(visibleEnemies, here), 16));
-
-			if (attackTarget == null) {
-				if (numAllies >= visibleEnemies.length * 2 || numAllies > visibleEnemies.length + 3) stance = MicroStance.AGGRESSIVE;
-				else stance = MicroStance.DEFENSIVE;
+			int numOtherVisibleAllies = rc.senseNearbyGameObjects(Robot.class, RobotType.SOLDIER.sensorRadiusSquared, us).length;
+			if (numOtherVisibleAllies >= 1 && 1 + numOtherVisibleAllies >= visibleEnemies.length - 1) {
+				Debug.indicate("micro", 0, "stance = aggressive");
+				stance = MicroStance.AGGRESSIVE;
 			} else {
-				if (numAllies >= 2 && numAllies >= visibleEnemies.length - 1) stance = MicroStance.AGGRESSIVE;
-				else stance = MicroStance.DEFENSIVE;
+				Debug.indicate("micro", 0, "stance = defensive");
+				stance = MicroStance.DEFENSIVE;
 			}
 		}
-		Nav.Engage navEngage = stance == MicroStance.AGGRESSIVE ? Nav.Engage.YES : Nav.Engage.NO;
 
 		// If there are enemies in attack range, fight!
 		if (attackableEnemies.length > 0 && rc.isActive()) {
@@ -50,33 +44,25 @@ public class BotSoldier extends Bot {
 			return;
 		}
 
-		// If we are in attack mode, move toward the attack target and engage.
 		if (attackTarget != null) {
-			Nav.goTo(attackTarget, Nav.Sneak.NO, navEngage);
+			Nav.goTo(attackTarget, Nav.Sneak.NO, stance == MicroStance.AGGRESSIVE ? Nav.Engage.YES : Nav.Engage.NO);
 			return;
 		}
 
-		// See if we should build a noise tower
 		if (tryBuildNoiseTower()) return;
 
-		// Build or defend a pastr
-		MapLocation desiredPastrLoc = MessageBoard.BEST_PASTR_LOC.readMapLocation(rc);
-		if (desiredPastrLoc != null) {
-			if (here.equals(desiredPastrLoc)) {
-				// We get to build the pastr!
+		MapLocation pastr = MessageBoard.BEST_PASTR_LOC.readMapLocation(rc);
+		if (pastr != null) {
+			if (here.equals(pastr)) {
 				if (rc.isActive()) {
 					rc.construct(RobotType.PASTR);
 					return;
 				}
 			} else {
-				// Go to the pastr location and fight if necessary
-				int distSq = here.distanceSquaredTo(desiredPastrLoc);
-				if (distSq <= 8 && visibleEnemies.length > 0) {
-					if (rc.isActive()) fight(stance);
-				} else {
-					Nav.Sneak navSneak = distSq <= 30 && visibleEnemies.length == 0 && rc.sensePastrLocations(us).length > 0 ? Nav.Sneak.YES : Nav.Sneak.NO;
-					Nav.goTo(desiredPastrLoc, navSneak, navEngage);
-				}
+				MapLocation[] ourPastrs = rc.sensePastrLocations(us);
+				Nav.Sneak sneak = ourPastrs.length > 0 && here.distanceSquaredTo(Util.closest(ourPastrs, here)) <= 30 ? Nav.Sneak.YES : Nav.Sneak.NO;
+				Nav.goTo(pastr, sneak, Nav.Engage.NO);
+				return;
 			}
 		}
 	}
@@ -193,7 +179,7 @@ public class BotSoldier extends Bot {
 						if (attackableEnemies[i].type != RobotType.SOLDIER) continue; // don't care if non-soldier enemies are double-teamed
 						MapLocation enemyLoc = attackableEnemies[i].location;
 						// TODO: count of allies should really only count soldiers
-						anEnemyIsDoubleTeamed |= numOtherAlliedSoldiersInAttackRange(enemyLoc) >= 1;
+						anEnemyIsDoubleTeamed |= numOtherAlliesInAttackRange(enemyLoc) >= 1;
 						if (anEnemyIsDoubleTeamed) break;
 					}
 					if (anEnemyIsDoubleTeamed) { // Fight!
@@ -212,7 +198,7 @@ public class BotSoldier extends Bot {
 					RobotInfo enemySoldier = findASoldier(attackableEnemies);
 					// TODO: count of allies should really only count soldiers
 					if (stance == MicroStance.AGGRESSIVE || enemySoldier.health <= rc.getHealth() || enemySoldier.constructingRounds > 0
-							|| numOtherAlliedSoldiersInAttackRange(enemySoldier.location) >= 1) {
+							|| numOtherAlliesInAttackRange(enemySoldier.location) >= 1) {
 						// Kill him!
 						Debug.indicate("micro", 1, "winning vs single enemy: fighting");
 						rc.attackSquare(enemySoldier.location);
@@ -220,7 +206,7 @@ public class BotSoldier extends Bot {
 					} else {
 						// retreat!
 						Debug.indicate("micro", 1, "losing vs single enemy: retreating (numOtherAllies in range of " + enemySoldier.location.toString()
-								+ ") is " + numOtherAlliedSoldiersInAttackRange(enemySoldier.location));
+								+ ") is " + numOtherAlliesInAttackRange(enemySoldier.location));
 						retreatOrFight();
 						return;
 					}
@@ -261,8 +247,20 @@ public class BotSoldier extends Bot {
 				// For now we are just going to stand off and move towards the nearest enemy as long as we don't engage.
 				// TODO: we can safely engage single robots with large enough actionDelay if we do it orthogonally
 				MapLocation closestSoldier = Util.closestSoldier(visibleEnemies, here);
-				//We deliberately count allied buildings below so that we are more aggressively about engaging enemies who attack our buildings
-				int maxEnemyExposure = numOtherAlliedUnitsInAttackRange(closestSoldier);
+				int maxEnemyExposure;
+				switch (stance) {
+					case DEFENSIVE:
+						maxEnemyExposure = 0;
+						break;
+
+					case AGGRESSIVE:
+						maxEnemyExposure = numOtherAlliesInAttackRange(closestSoldier);
+						break;
+
+					default: // should never be reached
+						maxEnemyExposure = 0;
+						break;
+				}
 				cautiouslyApproachVisibleEnemySoldier(closestSoldier, maxEnemyExposure);
 				return;
 			} else { // Can't see a soldier, only buildings.
@@ -327,28 +325,10 @@ public class BotSoldier extends Bot {
 		Debug.indicate("micro", 1, "can't safely approach enemy soldier");
 	}
 
-	private int numOtherAlliedSoldiersInAttackRange(MapLocation loc) throws GameActionException {
-		return numOtherAlliedSoldiersInRange(loc, RobotType.SOLDIER.attackRadiusMaxSquared);
-	}
-
-	private int numOtherAlliedSoldiersInRange(MapLocation loc, int rangeSq) throws GameActionException {
-		int numAlliedSoldiers = 0;
-		Robot[] allies = rc.senseNearbyGameObjects(Robot.class, loc, rangeSq, us);
-		for (int i = allies.length; i-- > 0;) {
-			if (rc.senseRobotInfo(allies[i]).type == RobotType.SOLDIER) numAlliedSoldiers++;
-		}
-		return numAlliedSoldiers;
-	}
-
-	// Includes buildings!
-	private int numOtherAlliedUnitsInAttackRange(MapLocation loc) throws GameActionException {
-		return numOtherAlliedUnitsInRange(loc, RobotType.SOLDIER.attackRadiusMaxSquared);
-	}
-
-	// Includes buildings!
-	private int numOtherAlliedUnitsInRange(MapLocation loc, int rangeSq) throws GameActionException {
-		Robot[] allies = rc.senseNearbyGameObjects(Robot.class, loc, rangeSq, us);
-		return allies.length;
+	// TODO: this function counts buildings as allies :( Consider fixing this
+	// This function costs at least 100 bytecodes!
+	private int numOtherAlliesInAttackRange(MapLocation loc) {
+		return rc.senseNearbyGameObjects(Robot.class, loc, RobotType.SOLDIER.attackRadiusMaxSquared, us).length;
 	}
 
 	// TODO: this function counts buildings as enemies :( Consider fixing this
@@ -383,7 +363,7 @@ public class BotSoldier extends Bot {
 			RobotInfo info = enemies[i];
 			if (info.type != RobotType.SOLDIER) continue;
 			MapLocation enemyLoc = info.location;
-			int numNearbyAllies = numOtherAlliedSoldiersInAttackRange(enemyLoc);
+			int numNearbyAllies = numOtherAlliesInAttackRange(enemyLoc);
 			if (numNearbyAllies > bestNumNearbyAllies) {
 				bestNumNearbyAllies = numNearbyAllies;
 				bestHealth = info.health;
