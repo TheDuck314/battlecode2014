@@ -1,4 +1,15 @@
+team069 - 1260/3
+   Does a HQ noise tower + pastr strategy, with fairly dumb but sometimes effective
+   noise tower herding.
+   WOULD HAVE LOST TO THEM EXCEPT THEY DIDN'T KNOW ABOUT THE HQ BUG
+
+team018 - NP-Compete
+   Does a HQ noise tower + multiple pastr strategy (I think multiple pastrs is dumb)
+   with circular herding, which is pretty fast and effect on the right maps.
+   WOULD HAVE LOST TO THEM EXCEPT THEY DIDN'T KNOW ABOUT THE HQ BUG
+
 team117 - Fragments of a Hologram Rose
+   HAS SOME REALLY COOL PATHFINDING: SEE GAME 752
    with framework-1-9: they built all pastrs early, I punished them and won
 
 team056 - baumteam

@@ -1,4 +1,4 @@
-package framework;
+package frame10noise;
 
 import battlecode.common.*;
 
@@ -59,14 +59,14 @@ public class Util {
 		return ret;
 	}
 	
-	public static MapLocation closestSoldier(RobotInfo[] infos, MapLocation here) {
+	public static MapLocation closestSoldier(RobotInfo[] infos, RobotController rc) {
 		MapLocation ret = null;
 		int bestDistSq = 999999;
 		for(int i = infos.length; i --> 0; ) {
 			RobotInfo info = infos[i];
 			if(info.type != RobotType.SOLDIER) continue;
 			MapLocation loc = info.location;
-			int distSq = loc.distanceSquaredTo(here);
+			int distSq = loc.distanceSquaredTo(rc.getLocation());
 			if(distSq < bestDistSq) {
 				bestDistSq = distSq;
 				ret = loc;

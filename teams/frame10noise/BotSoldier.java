@@ -1,4 +1,6 @@
-package framework;
+package frame10noise;
+
+import java.util.ArrayList;
 
 import battlecode.common.*;
 
@@ -9,43 +11,17 @@ public class BotSoldier extends Bot {
 		Nav.init(theRC);
 	}
 
-	private enum MicroStance {
-		DEFENSIVE, AGGRESSIVE
-	}
-
-	RobotInfo[] visibleEnemies; // enemies within vision radius (35)
-	RobotInfo[] attackableEnemies; // enemies within attack radius(10)
-
 	public void turn() throws GameActionException {
+		Debug.indicate("construct", 0, "construction timer = " + rc.getConstructingRounds());
 		if (rc.getConstructingRounds() > 0) return; // can't do anything while constructing
 
-		updateEnemyData();
+		if (rc.isActive()) {
+			if (fight()) return;
+		}
 
-		// If we have an attack target, go to that target and kill things
 		MapLocation attackTarget = MessageBoard.ATTACK_LOC.readMapLocation(rc);
-
-		MicroStance stance;
-		if (attackTarget == null) {
-			stance = MicroStance.DEFENSIVE;
-		} else {
-			int numOtherVisibleAllies = rc.senseNearbyGameObjects(Robot.class, RobotType.SOLDIER.sensorRadiusSquared, us).length;
-			if (numOtherVisibleAllies >= 1 && 1 + numOtherVisibleAllies >= visibleEnemies.length - 1) {
-				Debug.indicate("micro", 0, "stance = aggressive");
-				stance = MicroStance.AGGRESSIVE;
-			} else {
-				Debug.indicate("micro", 0, "stance = defensive");
-				stance = MicroStance.DEFENSIVE;
-			}
-		}
-
-		// If there are enemies in attack range, fight!
-		if (attackableEnemies.length > 0 && rc.isActive()) {
-			fight(stance);
-			return;
-		}
-
 		if (attackTarget != null) {
-			Nav.goTo(attackTarget, Nav.Sneak.NO, stance == MicroStance.AGGRESSIVE ? Nav.Engage.YES : Nav.Engage.NO);
+			Nav.goTo(attackTarget, Nav.Sneak.NO);
 			return;
 		}
 
@@ -60,8 +36,8 @@ public class BotSoldier extends Bot {
 				}
 			} else {
 				MapLocation[] ourPastrs = rc.sensePastrLocations(us);
-				Nav.Sneak sneak = ourPastrs.length > 0 && here.distanceSquaredTo(Util.closest(ourPastrs, here)) <= 30 ? Nav.Sneak.YES : Nav.Sneak.NO;
-				Nav.goTo(pastr, sneak, Nav.Engage.NO);
+				Nav.Sneak sneak = ourPastrs.length > 0 && here.distanceSquaredTo(ourPastrs[0]) <= 30 ? Nav.Sneak.YES : Nav.Sneak.NO;
+				Nav.goTo(pastr, sneak);
 				return;
 			}
 		}
@@ -95,28 +71,6 @@ public class BotSoldier extends Bot {
 		rc.construct(RobotType.NOISETOWER);
 		MessageBoard.BUILDING_NOISE_TOWER.writeMapLocation(here, rc);
 		return true;
-	}
-
-	private void updateEnemyData() throws GameActionException {
-		Robot[] visibleEnemyRobots = rc.senseNearbyGameObjects(Robot.class, RobotType.SOLDIER.sensorRadiusSquared, them);
-
-		visibleEnemies = new RobotInfo[visibleEnemyRobots.length];
-
-		boolean[] attackable = new boolean[visibleEnemyRobots.length];
-		int numAttackableEnemies = 0;
-		for (int i = visibleEnemies.length; i-- > 0;) {
-			RobotInfo info = rc.senseRobotInfo(visibleEnemyRobots[i]);
-			visibleEnemies[i] = info;
-			if (here.distanceSquaredTo(info.location) <= RobotType.SOLDIER.attackRadiusMaxSquared) {
-				numAttackableEnemies++;
-				attackable[i] = true;
-			}
-		}
-		attackableEnemies = new RobotInfo[numAttackableEnemies];
-		int enemyCounter = 0;
-		for (int i = visibleEnemies.length; i-- > 0;) {
-			if (attackable[i]) attackableEnemies[enemyCounter++] = visibleEnemies[i];
-		}
 	}
 
 	// @formatter:off
@@ -163,9 +117,12 @@ public class BotSoldier extends Bot {
 	// range of squares we could attack after one orthogonal movement is 16
 	// (so 10 < range <= 16 means we can't attack now, but could after one orthogonal movement)
 
-	// fight() should be called as a result of being forced into combat.
-	// After fight(), don't do anything except return.
-	private void fight(MicroStance stance) throws GameActionException {
+	private boolean fight() throws GameActionException {
+		Robot[] visibleEnemyRobots = rc.senseNearbyGameObjects(Robot.class, RobotType.SOLDIER.sensorRadiusSquared, them);
+		if (visibleEnemyRobots.length == 0) return false; // TODO: sense nearby battles with messages.
+
+		RobotInfo[] visibleEnemies = new RobotInfo[visibleEnemyRobots.length];
+		RobotInfo[] attackableEnemies = processVisibleEnemies(visibleEnemyRobots, visibleEnemies);
 		Debug.indicate("micro", 0, String.format("numVisibleEnemies = %d; numAttackableEnemies = %d", visibleEnemies.length, attackableEnemies.length));
 
 		if (attackableEnemies.length != 0) { // There is at least one enemy in attack range (which should hopefully not be their HQ)
@@ -178,37 +135,33 @@ public class BotSoldier extends Bot {
 					for (int i = attackableEnemies.length; i-- > 0;) {
 						if (attackableEnemies[i].type != RobotType.SOLDIER) continue; // don't care if non-soldier enemies are double-teamed
 						MapLocation enemyLoc = attackableEnemies[i].location;
-						// TODO: count of allies should really only count soldiers
 						anEnemyIsDoubleTeamed |= numOtherAlliesInAttackRange(enemyLoc) >= 1;
 						if (anEnemyIsDoubleTeamed) break;
 					}
 					if (anEnemyIsDoubleTeamed) { // Fight!
 						Debug.indicate("micro", 1, "double-teamed, but so is an enemy: fighting");
-						attackASoldier();
-						return;
+						attackASoldier(attackableEnemies);
+						return true;
 					} else { // no enemy is double-teamed. Retreat!
 						Debug.indicate("micro", 1, "double-teamed: retreating");
-						retreatOrFight();
-						return;
+						retreatOrFight(visibleEnemies, attackableEnemies);
+						return true;
 					}
 				} else { // We're not getting double-teamed. We're within attack range of exactly one soldier
 					// Fight on if we are winning the 1v1 or if the other guy is double-teamed. Otherwise retreat
-					// But if we are in aggressive mode, never retreat!
 					// First find the single enemy
 					RobotInfo enemySoldier = findASoldier(attackableEnemies);
-					// TODO: count of allies should really only count soldiers
-					if (stance == MicroStance.AGGRESSIVE || enemySoldier.health <= rc.getHealth() || enemySoldier.constructingRounds > 0
-							|| numOtherAlliesInAttackRange(enemySoldier.location) >= 1) {
+					if (enemySoldier.health <= rc.getHealth() || numOtherAlliesInAttackRange(enemySoldier.location) >= 1) {
 						// Kill him!
 						Debug.indicate("micro", 1, "winning vs single enemy: fighting");
 						rc.attackSquare(enemySoldier.location);
-						return;
+						return true;
 					} else {
 						// retreat!
 						Debug.indicate("micro", 1, "losing vs single enemy: retreating (numOtherAllies in range of " + enemySoldier.location.toString()
 								+ ") is " + numOtherAlliesInAttackRange(enemySoldier.location));
-						retreatOrFight();
-						return;
+						retreatOrFight(visibleEnemies, attackableEnemies);
+						return true;
 					}
 				}
 			} else { // can't attack a soldier
@@ -219,18 +172,18 @@ public class BotSoldier extends Bot {
 					// For the moment, let's just attack a building.
 					// TODO: add some code that makes us move to support allies when appropriate
 					Debug.indicate("micro", 1, "can see a soldier, but preferring to attack a building");
-					attackABuilding();
-					return;
+					attackABuilding(attackableEnemies);
+					return true;
 				} else {
 					// Can't see any soldiers, but can attack a building. Do it
 					Debug.indicate("micro", 1, "can't see a soldier; attacking a building");
-					attackABuilding();
-					return;
+					attackABuilding(attackableEnemies);
+					return true;
 				}
 			}
 		} else { // No attackable enemies! But there is at least one visible enemy
-			int numVisibleEnemySoldiers = Util.countSoldiers(visibleEnemies);
-			if (numVisibleEnemySoldiers > 0) {
+			boolean canSeeSoldier = Util.countSoldiers(visibleEnemies) > 0;
+			if (canSeeSoldier) {
 				// No enemy is currently in attack range. We can see at least one soldier.
 				// There are a few things we have to think about doing here.
 				// * If no combat is going on, then what happens depends on our current plans:
@@ -246,83 +199,68 @@ public class BotSoldier extends Bot {
 				//
 				// For now we are just going to stand off and move towards the nearest enemy as long as we don't engage.
 				// TODO: we can safely engage single robots with large enough actionDelay if we do it orthogonally
-				MapLocation closestSoldier = Util.closestSoldier(visibleEnemies, here);
-				int maxEnemyExposure;
-				switch (stance) {
-					case DEFENSIVE:
-						maxEnemyExposure = 0;
-						break;
+				// TODO: we need not be afraid of robots with constructingRounds > 0 (though this is a rare case)
+				int[] numEnemiesAttackingDirs = countNumEnemiesAttackingMoveDirs(visibleEnemies);
 
-					case AGGRESSIVE:
-						maxEnemyExposure = numOtherAlliesInAttackRange(closestSoldier);
-						break;
-
-					default: // should never be reached
-						maxEnemyExposure = 0;
-						break;
+				MapLocation closestSoldier = Util.closestSoldier(visibleEnemies, rc);
+				Direction toClosest = here.directionTo(closestSoldier);
+				Direction[] tryDirs = new Direction[] { toClosest, toClosest.rotateLeft(), toClosest.rotateRight() };
+				for (int i = 0; i < tryDirs.length; i++) {
+					Direction tryDir = tryDirs[i];
+					if (!rc.canMove(tryDir)) continue;
+					if (numEnemiesAttackingDirs[tryDir.ordinal()] > 0) continue;
+					if (isNearTheirHQ(here.add(tryDir))) continue;
+					Debug.indicate("micro", 1, String.format("cautiously approaching enemy soldier; direction %d; attackers = %d %d %d %d %d %d %d %d",
+							tryDir.ordinal(), numEnemiesAttackingDirs[0], numEnemiesAttackingDirs[1], numEnemiesAttackingDirs[2], numEnemiesAttackingDirs[3],
+							numEnemiesAttackingDirs[4], numEnemiesAttackingDirs[5], numEnemiesAttackingDirs[6], numEnemiesAttackingDirs[7]));
+					rc.move(tryDir);
+					return true;
 				}
-				cautiouslyApproachVisibleEnemySoldier(closestSoldier, maxEnemyExposure);
-				return;
-			} else { // Can't see a soldier, only buildings.
+				Debug.indicate("micro", 1, "can't safely approach enemy soldier");
+				return true;
+			} else { // Can't see a soldier, only buildings
 				// Make sure we aren't just seeing the HQ
 				boolean canSeeBuilding = visibleEnemies.length > 2 || visibleEnemies[0].type != RobotType.HQ;
 				if (canSeeBuilding) { // can see a non-HQ building
-					// We are not really fighting. Move toward the building so we eventually kill it
+					// Move toward the building, but only if this is really easy. I'm worried about getting
+					// stuck when we pass a building on the other side of a wall. Even this code might still
+					// get stuck in certain situations. Note that if we are navigating to the building, we'll
+					// keep doing so if we return false so this just lets us ignore buildings we aren't going for.
 					MapLocation closestBuilding = Util.closestNonHQ(visibleEnemies, rc);
-					Direction toBuilding = here.directionTo(closestBuilding);
-					int[] offsets = new int[] { 0, 1, -1, 2, -2, 3, -3, 4 };
-					for (int i = 0; i < offsets.length; i++) {
-						Direction tryDir = Direction.values()[(toBuilding.ordinal() + offsets[i] + 8) % 8];
-						if (rc.canMove(tryDir) && !isNearTheirHQ(here.add(tryDir))) {
-							Debug.indicate("micro", 1, "moving towards visible building");
-							rc.move(tryDir);
-							return;
-						}
+					Direction dir = here.directionTo(closestBuilding);
+					if (rc.canMove(dir) && !isNearTheirHQ(here.add(dir))) {
+						Debug.indicate("micro", 1, "moving towards visible building");
+						rc.move(dir);
+						return true;
+					} else { // There's something in the way. Don't go after the building
+						Debug.indicate("micro", 1, "ignoring visible building because we can't go straight at it");
+						return false;
 					}
-					Debug.indicate("micro", 1, "ignoring visible building because somehow we can't move");
-					return;
-				} else { // can only see the enemy HQ.
-					// we are not really fighting. Let's move away from it so we can say we did something
+				} else { // can only see the enemy HQ. we are not really fighting
 					Debug.indicate("micro", 1, "can only see enemy HQ");
-					Direction away = theirHQ.directionTo(here);
-					if (rc.canMove(away)) rc.move(away);
-					return;
+					return false;
 				}
 			}
 		}
 	}
 
-	private void tryMoveToward(MapLocation loc) throws GameActionException {
-		Direction toward = here.directionTo(loc);
-		Direction[] tryDirs = new Direction[] { toward, toward.rotateLeft(), toward.rotateRight() };
-		for (int i = 0; i < tryDirs.length; i++) {
-			Direction tryDir = tryDirs[i];
-			if (!rc.canMove(tryDir)) continue;
-			if (rc.getActionDelay() >= 0.2 && tryDir.isDiagonal()) continue; // Diagonal movement costs 2.8 actiondelay, so could result in an extra sitting
-																				// duck turn
-			if (isNearTheirHQ(here.add(tryDir))) continue;
-			rc.move(tryDir);
-			return;
+	private RobotInfo[] processVisibleEnemies(Robot[] visibleEnemyRobots, RobotInfo[] visibleEnemies) throws GameActionException {
+		boolean[] attackable = new boolean[visibleEnemyRobots.length];
+		int numAttackableEnemies = 0;
+		for (int i = visibleEnemies.length; i-- > 0;) {
+			RobotInfo info = rc.senseRobotInfo(visibleEnemyRobots[i]);
+			visibleEnemies[i] = info;
+			if (here.distanceSquaredTo(info.location) <= RobotType.SOLDIER.attackRadiusMaxSquared) {
+				numAttackableEnemies++;
+				attackable[i] = true;
+			}
 		}
-	}
-
-	private void cautiouslyApproachVisibleEnemySoldier(MapLocation enemySoldier, int maxEnemyExposure) throws GameActionException {
-		int[] numEnemiesAttackingDirs = countNumEnemiesAttackingMoveDirs();
-
-		Direction toEnemy = here.directionTo(enemySoldier);
-		Direction[] tryDirs = new Direction[] { toEnemy, toEnemy.rotateLeft(), toEnemy.rotateRight() };
-		for (int i = 0; i < tryDirs.length; i++) {
-			Direction tryDir = tryDirs[i];
-			if (!rc.canMove(tryDir)) continue;
-			if (numEnemiesAttackingDirs[tryDir.ordinal()] > maxEnemyExposure) continue;
-			if (isNearTheirHQ(here.add(tryDir))) continue;
-			Debug.indicate("micro", 1, String.format("cautiously approaching enemy soldier; direction %d; attackers = %d %d %d %d %d %d %d %d",
-					tryDir.ordinal(), numEnemiesAttackingDirs[0], numEnemiesAttackingDirs[1], numEnemiesAttackingDirs[2], numEnemiesAttackingDirs[3],
-					numEnemiesAttackingDirs[4], numEnemiesAttackingDirs[5], numEnemiesAttackingDirs[6], numEnemiesAttackingDirs[7]));
-			rc.move(tryDir);
-			return;
+		RobotInfo[] attackableEnemies = new RobotInfo[numAttackableEnemies];
+		int enemyCounter = 0;
+		for (int i = visibleEnemies.length; i-- > 0;) {
+			if (attackable[i]) attackableEnemies[enemyCounter++] = visibleEnemies[i];
 		}
-		Debug.indicate("micro", 1, "can't safely approach enemy soldier");
+		return attackableEnemies;
 	}
 
 	// TODO: this function counts buildings as allies :( Consider fixing this
@@ -347,7 +285,7 @@ public class BotSoldier extends Bot {
 	}
 
 	// Assumes attackableEnemies contains a soldier
-	private void attackASoldier() throws GameActionException {
+	private void attackASoldier(RobotInfo[] attackableEnemies) throws GameActionException {
 		MapLocation target = chooseSoldierAttackTarget(attackableEnemies);
 		rc.attackSquare(target);
 	}
@@ -388,19 +326,19 @@ public class BotSoldier extends Bot {
 	}
 
 	// Assumes attackableEnemies contains a pastr or noise tower
-	private void attackABuilding() throws GameActionException {
-		MapLocation target = chooseBuildingAttackTarget();
+	private void attackABuilding(RobotInfo[] attackableEnemies) throws GameActionException {
+		MapLocation target = chooseBuildingAttackTarget(attackableEnemies);
 		rc.attackSquare(target);
 	}
 
 	// If we can only attack buildings, this function decides which one to attack.
 	// It assumes that the enemies list does not contain any SOLDIERs or HQs!
-	private MapLocation chooseBuildingAttackTarget() throws GameActionException {
+	private MapLocation chooseBuildingAttackTarget(RobotInfo[] enemies) throws GameActionException {
 		MapLocation ret = null;
 		double bestHealth = 999999;
 		RobotType bestType = RobotType.NOISETOWER;
-		for (int i = attackableEnemies.length; i-- > 0;) {
-			RobotInfo info = attackableEnemies[i];
+		for (int i = enemies.length; i-- > 0;) {
+			RobotInfo info = enemies[i];
 			RobotType type = info.type;
 			if (type == bestType) { // break ties between equal types by health
 				double health = info.health;
@@ -417,24 +355,8 @@ public class BotSoldier extends Bot {
 		return ret;
 	}
 
-	private void retreatOrFight() throws GameActionException {
-		// If all our opponents have really high action delay, we can fire a last shot
-		// and still be able to move before they can return fire. This would most probably
-		// happen if an enemy engaged us after several diagonal moves. This could turn
-		// a losing 1v1 into a winning one!
-		boolean fireOneLastShot = true;
-		for (int i = attackableEnemies.length; i-- > 0;) {
-			fireOneLastShot &= attackableEnemies[i].actionDelay >= 3;
-			if (!fireOneLastShot) break;
-		}
-
-		if (fireOneLastShot) {
-			Debug.indicate("micro", 2, "parthian shot");
-			attackASoldier();
-			return;
-		}
-
-		Direction dir = chooseRetreatDirection();
+	private void retreatOrFight(RobotInfo[] visibleEnemies, RobotInfo[] attackableEnemies) throws GameActionException {
+		Direction dir = chooseRetreatDirection(visibleEnemies);
 		if (dir == null) { // Can't retreat! Fight!
 			Debug.indicate("micro", 2, "couldn't retreat; fighting instead");
 			MapLocation target = chooseSoldierAttackTarget(attackableEnemies);
@@ -488,11 +410,11 @@ public class BotSoldier extends Bot {
                                             {{},                {},                {},                {},                {},                {},                {},                {},                {},                {},                {}}};
    	// @formatter:on
 
-	private int[] countNumEnemiesAttackingMoveDirs() {
+	private int[] countNumEnemiesAttackingMoveDirs(RobotInfo[] visibleEnemies) {
 		int[] numEnemiesAttackingDir = new int[8];
 		for (int i = visibleEnemies.length; i-- > 0;) {
 			RobotInfo info = visibleEnemies[i];
-			if (info.type == RobotType.SOLDIER && info.constructingRounds == 0) {
+			if (info.type == RobotType.SOLDIER) {
 				MapLocation enemyLoc = visibleEnemies[i].location;
 				int[] attackedDirs = attackNotes[5 + enemyLoc.x - here.x][5 + enemyLoc.y - here.y];
 				for (int j = attackedDirs.length; j-- > 0;) {
@@ -503,8 +425,8 @@ public class BotSoldier extends Bot {
 		return numEnemiesAttackingDir;
 	}
 
-	private Direction chooseRetreatDirection() throws GameActionException {
-		int[] numEnemiesAttackingDir = countNumEnemiesAttackingMoveDirs();
+	private Direction chooseRetreatDirection(RobotInfo[] visibleEnemies) throws GameActionException {
+		int[] numEnemiesAttackingDir = countNumEnemiesAttackingMoveDirs(visibleEnemies);
 
 		int repelX = 0;
 		int repelY = 0;

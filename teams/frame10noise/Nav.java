@@ -1,4 +1,4 @@
-package framework;
+package frame10noise;
 
 import battlecode.common.*;
 
@@ -6,14 +6,17 @@ public class Nav {
 	private static MapLocation dest;
 	private static RobotController rc;
 	private static boolean sneak = false;
-	private static boolean engage = false;
 
-	private static MapLocation enemyHQ; // we can't ever go too near the enemy HQ
+	private static MapLocation enemyHQ; //we can't ever go too near the enemy HQ
 
 	private static boolean isNearTheirHQ(MapLocation loc) {
 		return enemyHQ.distanceSquaredTo(loc) <= 25;
 	}
-
+	
+	private static boolean canMoveSafely(Direction dir) {
+		return rc.canMove(dir) && !isNearTheirHQ(rc.getLocation().add(dir));
+	}
+	
 	private enum BugState {
 		DIRECT, BUG
 	}
@@ -35,10 +38,8 @@ public class Nav {
 		Direction[] tryDirs = new Direction[] { toDest, toDest.rotateLeft(), toDest.rotateRight() };
 		for (Direction tryDir : tryDirs) {
 			if (canMoveSafely(tryDir)) {
-				if (engage || !moveEntersFight(tryDir)) {
-					move(tryDir);
-					return true;
-				}
+				move(tryDir);
+				return true;
 			}
 		}
 		return false;
@@ -54,7 +55,7 @@ public class Nav {
 	private static Direction findBugMoveDir() {
 		Direction dir = bugLookStartDir;
 		for (int i = 8; i-- > 0;) {
-			if (canMoveSafely(dir) && (engage || !moveEntersFight(dir))) return dir;
+			if (canMoveSafely(dir)) return dir;
 			dir = (bugWallSide == WallSide.LEFT ? dir.rotateRight() : dir.rotateLeft());
 		}
 		return null;
@@ -198,46 +199,34 @@ public class Nav {
 	public enum Sneak {
 		YES, NO
 	}
-
-	public enum Engage {
-		YES, NO
-	}
-
-	public static void goTo(MapLocation theDest, Sneak theSneak, Engage theEngage) throws GameActionException {
+	
+	public static void goTo(MapLocation theDest, Sneak theSneak) throws GameActionException {
 		sneak = (theSneak == Sneak.YES);
-		engage = (theEngage == Engage.YES);
 
 		if (!theDest.equals(dest)) {
 			dest = theDest;
 			bugState = BugState.DIRECT;
-			// bfsInit(); // reset the BFS plan
+			bfsInit(); // reset the BFS plan
 		}
 
 		MapLocation here = rc.getLocation();
 
 		if (here.equals(theDest)) return;
 
-		// if (bfsPlan[here.x][here.y] == null) {
-		// bfsBuildPlan();
-		// }
+		//if (bfsPlan[here.x][here.y] == null) {
+		//	bfsBuildPlan();
+		//}		
 
 		if (!rc.isActive()) return;
 
-		// Direction dir = bfsPlan[here.x][here.y];
+//		Direction dir = bfsPlan[here.x][here.y];
 		Direction dir = Bfs.readResult(here, dest, rc);
-		if (dir != null) {
+		// TODO: if we can't go in the desired direction, we need a better fallback than switching
+		// to bug. For example, go in the closest direction, or if there is no close direction then
+		// wait for 2-4 turns, or if that doesn't work, then bug
+		if (dir != null && canMoveSafely(dir)) {
 			Debug.indicate("nav", 0, "using bfs");
-			Direction[] tryDirs = new Direction[] { dir, dir.rotateLeft(), dir.rotateRight() };
-			boolean fight = false;
-			for (int i = 0; i < tryDirs.length; i++) {
-				Direction tryDir = tryDirs[i];
-				if (canMoveSafely(tryDir)) {
-					if (engage || !moveEntersFight(tryDir)) {
-						move(tryDir);
-						return;
-					}
-				}
-			}
+			move(dir);
 		} else {
 			Debug.indicate("nav", 0, "using bug");
 			bugTo(dest);
@@ -249,11 +238,4 @@ public class Nav {
 		else rc.move(dir);
 	}
 
-	private static boolean canMoveSafely(Direction dir) {
-		return rc.canMove(dir) && !isNearTheirHQ(rc.getLocation().add(dir));
-	}
-
-	private static boolean moveEntersFight(Direction dir) {
-		return rc.senseNearbyGameObjects(Robot.class, rc.getLocation().add(dir), RobotType.SOLDIER.attackRadiusMaxSquared, rc.getTeam().opponent()).length > 0;
-	}
 }

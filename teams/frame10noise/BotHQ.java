@@ -1,4 +1,6 @@
-package framework;
+package frame10noise;
+
+import java.util.ArrayList;
 
 import battlecode.common.*;
 
@@ -51,7 +53,7 @@ public class BotHQ extends Bot {
 
 		attackEnemies();
 
-		directStrategyRush();
+		directStrategyMacro();
 
 		// Use spare bytecodes to do pathing computations
 		MapLocation pathingDest;
