@@ -1,10 +1,13 @@
 package framework;
 
+import java.util.ArrayList;
+
 import battlecode.common.*;
 
 public class BotHQ extends Bot {
 	public BotHQ(RobotController theRC) {
 		super(theRC);
+		Debug.init(rc, "bfs");
 
 		hqSeparation = Math.sqrt(ourHQ.distanceSquaredTo(theirHQ));
 		cowGrowth = rc.senseCowGrowth();
@@ -23,6 +26,7 @@ public class BotHQ extends Bot {
 	double theirMilk;
 
 	boolean attackModeTriggered = false;
+	MapLocation attackModeTarget = null;
 
 	MapLocation[] theirPastrs;
 	MapLocation[] ourPastrs;
@@ -31,7 +35,7 @@ public class BotHQ extends Bot {
 	double[][] cowGrowth;
 	double[][] computedPastrScores = null;
 	MapLocation computedBestPastrLocation = null;
-
+	
 	public void turn() throws GameActionException {
 		updateStrategicInfo();
 
@@ -49,7 +53,15 @@ public class BotHQ extends Bot {
 
 		attackEnemies();
 
-		directStrategy();
+		directStrategyRush();
+
+		// Use spare bytecodes to do pathing computations
+		MapLocation pathingDest;
+		if (attackModeTarget != null) pathingDest = attackModeTarget;
+		else if (computedBestPastrLocation != null) pathingDest = computedBestPastrLocation;
+		else pathingDest = null;
+
+		if (pathingDest != null) Bfs.work(pathingDest, rc, 9000);
 	}
 
 	private void doFirstTurn() throws GameActionException {
@@ -96,8 +108,14 @@ public class BotHQ extends Bot {
 		ourMilk = rc.senseTeamMilkQuantity(us);
 		theirMilk = rc.senseTeamMilkQuantity(them);
 	}
+	
+	private void directStrategyRush() throws GameActionException {
+		attackModeTarget = Util.closest(theirPastrs, ourHQ);
+		if (attackModeTarget == null) attackModeTarget = new MapLocation(rc.getMapWidth()/2, rc.getMapHeight()/2);
+		MessageBoard.ATTACK_LOC.writeMapLocation(attackModeTarget, rc);
+	}
 
-	private void directStrategy() throws GameActionException {
+	private void directStrategyMacro() throws GameActionException {		
 		// Decided whether to trigger attack mode
 		if (!attackModeTriggered) {
 			// if the enemy has overextended himself building pastrs, attack!
@@ -110,21 +128,22 @@ public class BotHQ extends Bot {
 					attackModeTriggered = true;
 				}
 			}
-			
+
 			// if the enemy is out-milking us, then we need to attack or we are going to lose
 			if (theirMilk >= 0.4 * GameConstants.WIN_QTY && theirMilk > ourMilk) {
 				attackModeTriggered = true;
 			}
 		}
-		
-		if(attackModeTriggered) {
-			MapLocation targetPastr = Util.closest(theirPastrs, ourHQ);
-			MessageBoard.ATTACK_LOC.writeMapLocation(targetPastr, rc);
-		} 
+
+		if (attackModeTriggered) {
+			attackModeTarget = Util.closest(theirPastrs, ourHQ);
+			MessageBoard.ATTACK_LOC.writeMapLocation(attackModeTarget, rc);
+		}
 	}
 
 	// TODO: this takes a little too long on
 	private void computePastrScores() {
+		Util.timerStart();
 		int mapWidth = rc.getMapWidth();
 		int mapHeight = rc.getMapHeight();
 
@@ -151,6 +170,7 @@ public class BotHQ extends Bot {
 				}
 			}
 		}
+		Util.timerEnd("computePastrScores");
 
 		computedPastrScores = pastrScores;
 	}
@@ -188,7 +208,7 @@ public class BotHQ extends Bot {
 
 	private boolean spawnSoldier() throws GameActionException {
 		if (rc.senseRobotCount() >= GameConstants.MAX_ROBOTS) return false;
-		// if (rc.senseRobotCount() >= 2) return false;
+		// if (rc.senseRobotCount() >= 1) return false;
 
 		Direction dir = Util.opposite(ourHQ.directionTo(theirHQ)).rotateLeft();
 		for (int i = 8; i-- > 0;) {

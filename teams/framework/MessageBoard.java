@@ -3,9 +3,9 @@ package framework;
 import battlecode.common.*;
 
 public enum MessageBoard {
-	BEST_PASTR_LOC(0),
-	ATTACK_LOC(1),
-	BUILDING_NOISE_TOWER(2);
+	BEST_PASTR_LOC(GameConstants.BROADCAST_MAX_CHANNELS - 1),
+	ATTACK_LOC(GameConstants.BROADCAST_MAX_CHANNELS - 2),
+	BUILDING_NOISE_TOWER(GameConstants.BROADCAST_MAX_CHANNELS - 3);
 	
 
 	private final int channel;

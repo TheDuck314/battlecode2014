@@ -201,13 +201,17 @@ public class Nav {
 
 		if (here.equals(theDest)) return;
 
-		if (bfsPlan[here.x][here.y] == null) {
-			bfsBuildPlan();
-		}
+		//if (bfsPlan[here.x][here.y] == null) {
+		//	bfsBuildPlan();
+		//}		
 
 		if (!rc.isActive()) return;
 
-		Direction dir = bfsPlan[here.x][here.y];
+//		Direction dir = bfsPlan[here.x][here.y];
+		Direction dir = Bfs.readResult(here, dest, rc);
+		// TODO: if we can't go in the desired direction, we need a better fallback than switching
+		// to bug. For example, go in the closest direction, or if there is no close direction then
+		// wait for 2-4 turns, or if that doesn't work, then bug
 		if (dir != null && rc.canMove(dir)) {
 			Debug.indicate("nav", 0, "using bfs");
 			move(dir);
