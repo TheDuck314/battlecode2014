@@ -5,7 +5,7 @@ import battlecode.common.*;
 public class BotHQ extends Bot {
 	public BotHQ(RobotController theRC) {
 		super(theRC);
-		Debug.init(rc, "bfs");
+		Debug.init(rc, "killcount");
 
 		hqSeparation = Math.sqrt(ourHQ.distanceSquaredTo(theirHQ));
 		cowGrowth = rc.senseCowGrowth();
@@ -33,7 +33,7 @@ public class BotHQ extends Bot {
 	double[][] cowGrowth;
 	double[][] computedPastrScores = null;
 	MapLocation computedBestPastrLocation = null;
-	
+
 	public void turn() throws GameActionException {
 		updateStrategicInfo();
 
@@ -75,6 +75,7 @@ public class BotHQ extends Bot {
 		MessageBoard.BEST_PASTR_LOC.writeMapLocation(null, rc);
 		MessageBoard.ATTACK_LOC.writeMapLocation(null, rc);
 		MessageBoard.BUILDING_NOISE_TOWER.writeMapLocation(null, rc);
+		MessageBoard.ROUND_KILL_COUNT.writeInt(0, rc);
 	}
 
 	// Guess how many bots the opponent has
@@ -85,6 +86,10 @@ public class BotHQ extends Bot {
 		numEnemyPastrs = theirPastrs.length;
 		ourPastrs = rc.sensePastrLocations(us);
 		numAlliedPastrs = ourPastrs.length;
+
+		int numKillsLastTurn = MessageBoard.ROUND_KILL_COUNT.readInt(rc);
+		MessageBoard.ROUND_KILL_COUNT.writeInt(0, rc);
+		maxEnemySpawns -= numKillsLastTurn;
 
 		virtualSpawnCountdown--;
 		if (virtualSpawnCountdown <= 0) {
@@ -106,26 +111,26 @@ public class BotHQ extends Bot {
 		ourMilk = rc.senseTeamMilkQuantity(us);
 		theirMilk = rc.senseTeamMilkQuantity(them);
 	}
-	
+
 	private void directStrategyRush() throws GameActionException {
 		attackModeTarget = Util.closest(theirPastrs, ourHQ);
-		if (attackModeTarget == null) attackModeTarget = new MapLocation(rc.getMapWidth()/2, rc.getMapHeight()/2);
+		if (attackModeTarget == null) attackModeTarget = new MapLocation(rc.getMapWidth() / 2, rc.getMapHeight() / 2);
 		MessageBoard.ATTACK_LOC.writeMapLocation(attackModeTarget, rc);
 	}
 
-	private void directStrategyMacro() throws GameActionException {		
+	private void directStrategyMacro() throws GameActionException {
 		// Decided whether to trigger attack mode
 		if (!attackModeTriggered) {
-			// if the enemy has overextended himself building pastrs, attack!
-			// The threshold to attack should be smaller on a smaller map because
-			// it will take less time to get there, so the opponent will have less time to
-			// mend his weakness.
 			if (numEnemyPastrs >= 2) {
+				// if the enemy has overextended himself building pastrs, attack!
+				// The threshold to attack should be smaller on a smaller map because
+				// it will take less time to get there, so the opponent will have less time to
+				// mend his weakness.
 				int attackThreshold = 1 + (int) (hqSeparation / 40);
 				if (numAlliedSoldiers - maxEnemySoldiers >= attackThreshold) {
 					attackModeTriggered = true;
 				}
-			}
+			} 
 
 			// if the enemy is out-milking us, then we need to attack or we are going to lose
 			if (theirMilk >= 0.4 * GameConstants.WIN_QTY && theirMilk > ourMilk) {
@@ -135,13 +140,13 @@ public class BotHQ extends Bot {
 
 		if (attackModeTriggered) {
 			attackModeTarget = Util.closest(theirPastrs, ourHQ);
+			if(attackModeTarget == null) attackModeTarget = theirHQ; //if they have no pastrs, camp their spawn
 			MessageBoard.ATTACK_LOC.writeMapLocation(attackModeTarget, rc);
 		}
 	}
 
 	// TODO: this takes a little too long on
 	private void computePastrScores() {
-		Util.timerStart();
 		int mapWidth = rc.getMapWidth();
 		int mapHeight = rc.getMapHeight();
 
@@ -168,7 +173,6 @@ public class BotHQ extends Bot {
 				}
 			}
 		}
-		Util.timerEnd("computePastrScores");
 
 		computedPastrScores = pastrScores;
 	}

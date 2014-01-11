@@ -5,8 +5,9 @@ import battlecode.common.*;
 public enum MessageBoard {
 	BEST_PASTR_LOC(GameConstants.BROADCAST_MAX_CHANNELS - 1),
 	ATTACK_LOC(GameConstants.BROADCAST_MAX_CHANNELS - 2),
-	BUILDING_NOISE_TOWER(GameConstants.BROADCAST_MAX_CHANNELS - 3);
-	
+	BUILDING_NOISE_TOWER(GameConstants.BROADCAST_MAX_CHANNELS - 3),
+	ROUND_KILL_COUNT(GameConstants.BROADCAST_MAX_CHANNELS - 4),
+	CAMP_SPAWN_TARGET(GameConstants.BROADCAST_MAX_CHANNELS - 5);	
 
 	private final int channel;
 
@@ -20,6 +21,10 @@ public enum MessageBoard {
 
 	public int readInt(RobotController rc) throws GameActionException {
 		return rc.readBroadcast(channel);
+	}
+	
+	public void incrementInt(RobotController rc) throws GameActionException {
+		writeInt(1 + readInt(rc), rc);
 	}
 
 	public void writeMapLocation(MapLocation loc, RobotController rc) throws GameActionException {

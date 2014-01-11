@@ -6,7 +6,7 @@ public class Util {
 	public static boolean passable(TerrainTile t) {
 		return t == TerrainTile.NORMAL || t == TerrainTile.ROAD;
 	}
-	
+
 	public static MapLocation closest(MapLocation[] locs, MapLocation to) {
 		MapLocation ret = null;
 		int bestDistSq = 999999;
@@ -19,15 +19,15 @@ public class Util {
 		}
 		return ret;
 	}
-	
+
 	public static MapLocation closest(RobotInfo[] infos, MapLocation here) {
 		MapLocation ret = null;
 		int bestDistSq = 999999;
-		for(int i = infos.length; i --> 0; ) {
+		for (int i = infos.length; i-- > 0;) {
 			RobotInfo info = infos[i];
 			MapLocation loc = info.location;
 			int distSq = loc.distanceSquaredTo(here);
-			if(distSq < bestDistSq) {
+			if (distSq < bestDistSq) {
 				bestDistSq = distSq;
 				ret = loc;
 			}
@@ -41,48 +41,48 @@ public class Util {
 		}
 		return false;
 	}
-	
+
 	public static int countSoldiers(RobotInfo[] infos) throws GameActionException {
 		int ret = 0;
-		for(int i = infos.length; i --> 0; ) {
-			if(infos[i].type == RobotType.SOLDIER) ret++;
+		for (int i = infos.length; i-- > 0;) {
+			if (infos[i].type == RobotType.SOLDIER) ret++;
 		}
 		return ret;
 	}
-	
+
 	public static RobotInfo[] senseAllInfos(Robot[] bots, RobotController rc) throws GameActionException {
 		RobotInfo[] ret = new RobotInfo[bots.length];
-		for(int i = bots.length; i --> 0; ) {
+		for (int i = bots.length; i-- > 0;) {
 			ret[i] = rc.senseRobotInfo(bots[i]);
 		}
 		return ret;
 	}
-	
+
 	public static MapLocation closestNonHQ(RobotInfo[] infos, RobotController rc) {
 		MapLocation ret = null;
 		int bestDistSq = 999999;
-		for(int i = infos.length; i --> 0; ) {
+		for (int i = infos.length; i-- > 0;) {
 			RobotInfo info = infos[i];
-			if(info.type == RobotType.HQ) continue;
+			if (info.type == RobotType.HQ) continue;
 			MapLocation loc = info.location;
 			int distSq = loc.distanceSquaredTo(rc.getLocation());
-			if(distSq < bestDistSq) {
+			if (distSq < bestDistSq) {
 				bestDistSq = distSq;
 				ret = loc;
 			}
 		}
 		return ret;
 	}
-	
+
 	public static MapLocation closestSoldier(RobotInfo[] infos, MapLocation here) {
 		MapLocation ret = null;
 		int bestDistSq = 999999;
-		for(int i = infos.length; i --> 0; ) {
+		for (int i = infos.length; i-- > 0;) {
 			RobotInfo info = infos[i];
-			if(info.type != RobotType.SOLDIER) continue;
+			if (info.type != RobotType.SOLDIER) continue;
 			MapLocation loc = info.location;
 			int distSq = loc.distanceSquaredTo(here);
-			if(distSq < bestDistSq) {
+			if (distSq < bestDistSq) {
 				bestDistSq = distSq;
 				ret = loc;
 			}
@@ -92,6 +92,13 @@ public class Util {
 
 	public static Direction opposite(Direction dir) {
 		return Direction.values()[(dir.ordinal() + 4) % 8];
+	}
+
+	public static boolean inHQAttackRange(MapLocation loc, MapLocation hq) {
+		int distSq = hq.distanceSquaredTo(loc);
+		if (distSq < 25) return true;
+		else if(distSq > 25) return false;
+		else return (loc.x != hq.x) && (loc.y != hq.y);
 	}
 
 	public static void debugBytecodes(String message) {

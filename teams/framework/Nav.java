@@ -10,10 +10,6 @@ public class Nav {
 
 	private static MapLocation enemyHQ; // we can't ever go too near the enemy HQ
 
-	private static boolean isNearTheirHQ(MapLocation loc) {
-		return enemyHQ.distanceSquaredTo(loc) <= 25;
-	}
-
 	private enum BugState {
 		DIRECT, BUG
 	}
@@ -178,7 +174,7 @@ public class Nav {
 				int y = locY + dirsY[i];
 				if (x > 0 && y > 0 && x < mapWidth && y < mapHeight && !bfsWasQueued[x][y]) {
 					MapLocation newLoc = new MapLocation(x, y);
-					if (rc.senseTerrainTile(newLoc) != TerrainTile.VOID && !isNearTheirHQ(newLoc)) {
+					if (rc.senseTerrainTile(newLoc) != TerrainTile.VOID && !Util.inHQAttackRange(newLoc, enemyHQ)) {
 						bfsPlan[x][y] = dirs[i];
 						// push newLoc onto queue
 						bfsQueue[bfsQueueTail] = newLoc;
@@ -225,7 +221,7 @@ public class Nav {
 
 		// Direction dir = bfsPlan[here.x][here.y];
 		Direction dir = Bfs.readResult(here, dest, rc);
-		if (dir != null) {
+		if (dir != null && !Util.inHQAttackRange(rc.getLocation().add(dir), enemyHQ)) {
 			Debug.indicate("nav", 0, "using bfs");
 			Direction[] tryDirs = new Direction[] { dir, dir.rotateLeft(), dir.rotateRight() };
 			boolean fight = false;
@@ -250,7 +246,7 @@ public class Nav {
 	}
 
 	private static boolean canMoveSafely(Direction dir) {
-		return rc.canMove(dir) && !isNearTheirHQ(rc.getLocation().add(dir));
+		return rc.canMove(dir) && !Util.inHQAttackRange(rc.getLocation().add(dir), enemyHQ);
 	}
 
 	private static boolean moveEntersFight(Direction dir) {

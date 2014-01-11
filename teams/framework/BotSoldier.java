@@ -215,7 +215,7 @@ public class BotSoldier extends Bot {
 							|| numOtherAlliedSoldiersInAttackRange(enemySoldier.location) >= 1) {
 						// Kill him!
 						Debug.indicate("micro", 1, "winning vs single enemy: fighting");
-						rc.attackSquare(enemySoldier.location);
+						attackAndRecord(enemySoldier);
 						return;
 					} else {
 						// retreat!
@@ -275,7 +275,7 @@ public class BotSoldier extends Bot {
 					int[] offsets = new int[] { 0, 1, -1, 2, -2, 3, -3, 4 };
 					for (int i = 0; i < offsets.length; i++) {
 						Direction tryDir = Direction.values()[(toBuilding.ordinal() + offsets[i] + 8) % 8];
-						if (rc.canMove(tryDir) && !isNearTheirHQ(here.add(tryDir))) {
+						if (rc.canMove(tryDir) && !Util.inHQAttackRange(here.add(tryDir), theirHQ)) {
 							Debug.indicate("micro", 1, "moving towards visible building");
 							rc.move(tryDir);
 							return;
@@ -302,7 +302,7 @@ public class BotSoldier extends Bot {
 			if (!rc.canMove(tryDir)) continue;
 			if (rc.getActionDelay() >= 0.2 && tryDir.isDiagonal()) continue; // Diagonal movement costs 2.8 actiondelay, so could result in an extra sitting
 																				// duck turn
-			if (isNearTheirHQ(here.add(tryDir))) continue;
+			if (Util.inHQAttackRange(here.add(tryDir), theirHQ)) continue;
 			rc.move(tryDir);
 			return;
 		}
@@ -317,7 +317,7 @@ public class BotSoldier extends Bot {
 			Direction tryDir = tryDirs[i];
 			if (!rc.canMove(tryDir)) continue;
 			if (numEnemiesAttackingDirs[tryDir.ordinal()] > maxEnemyExposure) continue;
-			if (isNearTheirHQ(here.add(tryDir))) continue;
+			if (Util.inHQAttackRange(here.add(tryDir), theirHQ)) continue;
 			Debug.indicate("micro", 1, String.format("cautiously approaching enemy soldier; direction %d; attackers = %d %d %d %d %d %d %d %d",
 					tryDir.ordinal(), numEnemiesAttackingDirs[0], numEnemiesAttackingDirs[1], numEnemiesAttackingDirs[2], numEnemiesAttackingDirs[3],
 					numEnemiesAttackingDirs[4], numEnemiesAttackingDirs[5], numEnemiesAttackingDirs[6], numEnemiesAttackingDirs[7]));
@@ -368,14 +368,14 @@ public class BotSoldier extends Bot {
 
 	// Assumes attackableEnemies contains a soldier
 	private void attackASoldier() throws GameActionException {
-		MapLocation target = chooseSoldierAttackTarget(attackableEnemies);
-		rc.attackSquare(target);
+		RobotInfo target = chooseSoldierAttackTarget(attackableEnemies);
+		attackAndRecord(target);
 	}
 
 	// Assumes enemies list contains at least one soldier!
 	// TODO: focus on robots with constructingRounds == 0? This seems like a rare case and maybe not worth it
-	private MapLocation chooseSoldierAttackTarget(RobotInfo[] enemies) throws GameActionException {
-		MapLocation ret = null;
+	private RobotInfo chooseSoldierAttackTarget(RobotInfo[] enemies) throws GameActionException {
+		RobotInfo ret = null;
 		double bestNumNearbyAllies = -1;
 		double bestHealth = 999999;
 		double bestActionDelay = 999999;
@@ -388,18 +388,18 @@ public class BotSoldier extends Bot {
 				bestNumNearbyAllies = numNearbyAllies;
 				bestHealth = info.health;
 				bestActionDelay = info.actionDelay;
-				ret = enemyLoc;
+				ret = info;
 			} else if (numNearbyAllies == bestNumNearbyAllies) {
 				double health = info.health;
 				if (health < bestHealth) {
 					bestHealth = health;
 					bestActionDelay = info.actionDelay;
-					ret = enemyLoc;
+					ret = info;
 				} else if (health == bestHealth) {
 					double actionDelay = info.actionDelay;
 					if (actionDelay < bestActionDelay) {
 						bestActionDelay = actionDelay;
-						ret = enemyLoc;
+						ret = info;
 					}
 				}
 			}
@@ -409,14 +409,14 @@ public class BotSoldier extends Bot {
 
 	// Assumes attackableEnemies contains a pastr or noise tower
 	private void attackABuilding() throws GameActionException {
-		MapLocation target = chooseBuildingAttackTarget();
-		rc.attackSquare(target);
+		RobotInfo target = chooseBuildingAttackTarget();
+		attackAndRecord(target);
 	}
 
 	// If we can only attack buildings, this function decides which one to attack.
 	// It assumes that the enemies list does not contain any SOLDIERs or HQs!
-	private MapLocation chooseBuildingAttackTarget() throws GameActionException {
-		MapLocation ret = null;
+	private RobotInfo chooseBuildingAttackTarget() throws GameActionException {
+		RobotInfo ret = null;
 		double bestHealth = 999999;
 		RobotType bestType = RobotType.NOISETOWER;
 		for (int i = attackableEnemies.length; i-- > 0;) {
@@ -426,12 +426,12 @@ public class BotSoldier extends Bot {
 				double health = info.health;
 				if (health < bestHealth) {
 					bestHealth = health;
-					ret = info.location;
+					ret = info;
 				}
 			} else if (type == RobotType.PASTR && bestType == RobotType.NOISETOWER) {
 				bestType = type;
 				bestHealth = info.health;
-				ret = info.location;
+				ret = info;
 			}
 		}
 		return ret;
@@ -457,8 +457,8 @@ public class BotSoldier extends Bot {
 		Direction dir = chooseRetreatDirection();
 		if (dir == null) { // Can't retreat! Fight!
 			Debug.indicate("micro", 2, "couldn't retreat; fighting instead");
-			MapLocation target = chooseSoldierAttackTarget(attackableEnemies);
-			rc.attackSquare(target);
+			RobotInfo target = chooseSoldierAttackTarget(attackableEnemies);
+			attackAndRecord(target);
 		} else { // Can retreat. Do it!
 			Debug.indicate("micro", 2, "retreating successfully");
 			rc.move(dir);
@@ -557,17 +557,15 @@ public class BotSoldier extends Bot {
 			if (!rc.canMove(tryDir)) continue;
 			MapLocation tryLoc = here.add(tryDir);
 			if (numEnemiesAttackingDir[tryDir.ordinal()] > 0) continue;
-			if (isNearTheirHQ(tryLoc)) continue;
+			if (Util.inHQAttackRange(tryLoc, theirHQ)) continue;
 			return tryDir;
 		}
 
 		return null;
 	}
-
-	// A useful function since under no circumstances do we want to walk on squares that are attackable by the enemy HQ.
-	// Currently it incorrectly excludes the delta of (5, 0), which the HQ can't actually reach with splash damage, but
-	// hopefully we don't ever actually need to go to that square
-	private boolean isNearTheirHQ(MapLocation loc) {
-		return theirHQ.distanceSquaredTo(loc) <= 25;
+	
+	private void attackAndRecord(RobotInfo enemyInfo) throws GameActionException {
+		rc.attackSquare(enemyInfo.location);
+		if(enemyInfo.health <= RobotType.SOLDIER.attackPower) MessageBoard.ROUND_KILL_COUNT.incrementInt(rc);
 	}
 }
