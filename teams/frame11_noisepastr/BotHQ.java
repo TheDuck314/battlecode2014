@@ -1,4 +1,4 @@
-package framework;
+package frame11_noisepastr;
 
 import battlecode.common.*;
 
@@ -179,15 +179,12 @@ public class BotHQ extends Bot {
 				N++;
 			}
 		}
-		if(N == 0) return null;
 		return new MapLocation(x / N, y / N);
 	}
 
 	private MapLocation chooseEnemyPastrAttackTarget() {
 		MapLocation soldierCenter = findSoldierCenterOfMass();
 
-		if(soldierCenter == null) soldierCenter = ourHQ;
-		
 		int bestDifficulty = 999999;
 		MapLocation bestTarget = null;
 		for (int i = theirPastrs.length; i-- > 0;) {
