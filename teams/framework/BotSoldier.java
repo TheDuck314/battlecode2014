@@ -365,7 +365,7 @@ public class BotSoldier extends Bot {
 			}
 		}
 	}
-	
+
 	private void cautiouslyApproachVisibleEnemySoldier(MapLocation enemySoldier, int maxEnemyExposure) throws GameActionException {
 		int[] numEnemiesAttackingDirs = countNumEnemiesAttackingMoveDirs();
 
@@ -384,7 +384,7 @@ public class BotSoldier extends Bot {
 		}
 		Debug.indicate("micro", 1, "can't safely approach enemy soldier");
 	}
-	
+
 	private void harrassTheirHQ() throws GameActionException {
 		harrassToward(theirHQ);
 	}
@@ -392,7 +392,7 @@ public class BotSoldier extends Bot {
 	private void harrassToward(MapLocation enemySoldier) throws GameActionException {
 		Direction toEnemy = here.directionTo(enemySoldier);
 
-		if (FastRandom.randInt(5) == 0 && numOtherAlliedSoldiersInRange(here.add(toEnemy, 2), 1) == 0) {
+		if (FastRandom.randInt(4) == 0 && numOtherAlliedSoldiersInRange(here.add(toEnemy, 2), 1) == 0) {
 			rc.attackSquare(here.add(toEnemy, 2));
 			return;
 		}
@@ -400,10 +400,19 @@ public class BotSoldier extends Bot {
 		int[] numEnemiesAttackingDirs = countNumEnemiesAttackingMoveDirs();
 
 		Direction[] tryDirs;
-		if (FastRandom.randInt(2) == 0) tryDirs = new Direction[] { toEnemy, toEnemy.rotateLeft(), toEnemy.rotateRight(), toEnemy.rotateLeft().rotateLeft(),
-				toEnemy.rotateRight().rotateRight() };
-		else tryDirs = new Direction[] { toEnemy, toEnemy.rotateLeft(), toEnemy.rotateRight() };
-		for (int i = 0; i < tryDirs.length; i++) {
+		Robot[] alliedRobots = rc.senseNearbyGameObjects(Robot.class, here, RobotType.SOLDIER.sensorRadiusSquared, us);
+		RobotInfo[] allies = Util.senseAllInfos(alliedRobots, rc);
+		MapLocation closestAlly = Util.closest(allies, here);
+		if (closestAlly == null) {
+			tryDirs = new Direction[] { toEnemy, toEnemy.rotateLeft(), toEnemy.rotateRight(), toEnemy.rotateLeft().rotateLeft(),
+					toEnemy.rotateRight().rotateRight(), toEnemy.rotateLeft().rotateLeft().rotateLeft(), toEnemy.rotateRight().rotateRight().rotateRight() };
+		} else {
+			Direction repel = closestAlly.directionTo(here);
+			tryDirs = new Direction[] { repel, repel, repel, repel, toEnemy, toEnemy.rotateLeft(), toEnemy.rotateRight(), toEnemy.rotateLeft().rotateLeft(),
+					toEnemy.rotateRight().rotateRight(), toEnemy.rotateLeft().rotateLeft().rotateLeft(), toEnemy.rotateRight().rotateRight().rotateRight() };
+		}
+		for (int t = 0; t < 3; t++) {
+			int i = FastRandom.randInt(tryDirs.length);
 			Direction tryDir = tryDirs[i];
 			if (!rc.canMove(tryDir)) continue;
 			if (numEnemiesAttackingDirs[tryDir.ordinal()] > 0) continue;

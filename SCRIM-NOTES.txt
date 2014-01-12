@@ -19,8 +19,9 @@ team056 - baumteam
 
 team225 - The Simple Soldier
    with framework-1-9: they built too many pastrs, and I punished them and won
-   
+
 team133 - Proxy 2 Gate
+   they now have a possibly-dangerous rush?
    INTERESTING STAND-OFFISH MICRO: WATCH MATCH 292; MIGHT BE SLIGHTLY BETTER THAN MINE
    with framework-1-9: (match 292) G#1: they build 2 pastrs, I built 1,
                                         all pastrs were destroyed, I rebuilt mine and wo

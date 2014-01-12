@@ -73,20 +73,29 @@ public class BotNoiseTower extends Bot {
 			if (herdTargetIndex <= 0) {
 				herdTargetIndex = Math.min(400, numHerdPoints - 1);
 			}
-			
+
 			// MapLocation herdTarget = herdPoints[herdTargetIndex];
 			// Direction pointHerdDir = squareHerdDirs[herdTarget.x][herdTarget.y];
 			MapLocation herdTarget = HerdPattern.Band.ONE.readHerdMapLocation(herdTargetIndex, rc);
 			Direction pointHerdDir = HerdPattern.Band.ONE.readHerdDir(herdTargetIndex, rc);
 
-			//attackTarget = herdTarget.add(Util.opposite(pointHerdDir), pointHerdDir.isDiagonal() ? 1 : 2);
+			// attackTarget = herdTarget.add(Util.opposite(pointHerdDir), pointHerdDir.isDiagonal() ? 1 : 2);
 			attackTarget = herdTarget.add(Util.opposite(pointHerdDir), pointHerdDir.isDiagonal() ? 2 : 3);
 
-			herdTargetIndex -= FastRandom.randInt(2, 7);
+			int skip = herdTargetIndex < 100 ? FastRandom.randInt(1, 3) : FastRandom.randInt(1, 7);
+			for (int i = skip; i-- > 0;) {
+				herdTargetIndex--;
+				MapLocation nextHerdTarget = HerdPattern.Band.ONE.readHerdMapLocation(herdTargetIndex, rc);
+				if (nextHerdTarget.x == 0 || nextHerdTarget.y == 0 || nextHerdTarget.x == rc.getMapWidth() - 1 || nextHerdTarget.y == rc.getMapHeight() - 1) break;
+			}
+
+			// if(herdTargetIndex < 50) herdTargetIndex -= FastRandom.randInt(1, 3);
+			// else herdTargetIndex -= FastRandom.randInt(1, 7);
+			Debug.indicate("herd", 0, "" + herdTargetIndex);
 			// herdTargetIndex -= 1 + (int)Math.sqrt(herdTargetIndex/2);
 		} while (!rc.canAttackSquare(attackTarget));
 
-		//rc.attackSquareLight(attackTarget);
+		// rc.attackSquareLight(attackTarget);
 		rc.attackSquare(attackTarget);
 	}
 
