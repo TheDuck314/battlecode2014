@@ -47,7 +47,7 @@ public class Nav {
 		bugRotationCount = 0;
 	}
 
-	private static Direction findBugMoveDir() {
+	private static Direction findBugMoveDir() throws GameActionException {
 		Direction dir = bugLookStartDir;
 		for (int i = 8; i-- > 0;) {
 			if (canMoveSafely(dir) && (engage || !moveEntersFight(dir))) return dir;
@@ -249,7 +249,12 @@ public class Nav {
 		return rc.canMove(dir) && !Util.inHQAttackRange(rc.getLocation().add(dir), enemyHQ);
 	}
 
-	private static boolean moveEntersFight(Direction dir) {
-		return rc.senseNearbyGameObjects(Robot.class, rc.getLocation().add(dir), RobotType.SOLDIER.attackRadiusMaxSquared, rc.getTeam().opponent()).length > 0;
+	private static boolean moveEntersFight(Direction dir) throws GameActionException {
+		Robot[] engagedUnits = rc.senseNearbyGameObjects(Robot.class, rc.getLocation().add(dir), RobotType.SOLDIER.attackRadiusMaxSquared, rc.getTeam()
+				.opponent());
+		for (int i = engagedUnits.length; i-- > 0;) {
+			if (rc.senseRobotInfo(engagedUnits[i]).type == RobotType.SOLDIER) return true;
+		}
+		return false;
 	}
 }

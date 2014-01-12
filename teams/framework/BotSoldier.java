@@ -5,7 +5,7 @@ import battlecode.common.*;
 public class BotSoldier extends Bot {
 	public BotSoldier(RobotController theRC) throws GameActionException {
 		super(theRC);
-		Debug.init(theRC, "buildorder");
+		Debug.init(theRC, "micro");
 		Nav.init(theRC);
 
 		spawnOrder = MessageBoard.SPAWN_COUNT.readInt();
@@ -13,8 +13,11 @@ public class BotSoldier extends Bot {
 	}
 
 	private enum MicroStance {
-		DEFENSIVE, AGGRESSIVE
+		DEFENSIVE, AGGRESSIVE, HARRASS
 	}
+
+	MicroStance stance; // how to behave in combat
+	Nav.Engage navEngage; // whether to engage enemies during navigation
 
 	RobotInfo[] visibleEnemies; // enemies within vision radius (35)
 	RobotInfo[] attackableEnemies; // enemies within attack radius(10)
@@ -23,53 +26,84 @@ public class BotSoldier extends Bot {
 	public void turn() throws GameActionException {
 		if (rc.getConstructingRounds() > 0) return; // can't do anything while constructing
 
-		// if(spawnOrder == 1) rc.construct(RobotType.NOISETOWER);
-		// if(spawnOrder == 2) rc.construct(RobotType.PASTR);
+		if (Strategy.active == Strategy.HQ_PASTR) {
+			if (spawnOrder == 1) {
+				MapLocation pastrLoc = ourHQ.add(ourHQ.directionTo(here).rotateRight().rotateRight());
+				constructNoiseTower(pastrLoc);
+				return;
+			}
+			if (spawnOrder == 2) {
+				rc.construct(RobotType.PASTR);
+				return;
+			}
+		}
 
 		updateEnemyData();
-
-		// If we have an attack target, go to that target and kill things
 		MapLocation attackTarget = MessageBoard.ATTACK_LOC.readMapLocation();
+		stance = chooseMicroStance(attackTarget);
+		navEngage = stance == MicroStance.AGGRESSIVE ? Nav.Engage.YES : Nav.Engage.NO;
 
-		// Decide whether to behave aggressively or defensively. Only be aggressive if we are in attack mode
-		// and there is a decent number of allies around, or if we are in any mode and we have a big numbers advantage
-		MicroStance stance;
+		// If there are enemies in attack range, fight!
+		if (attackableEnemies.length > 0 && rc.isActive()) {
+			fight();
+			return;
+		}
+
+		// If we are in attack mode, move toward the attack target and engage.
+		if (attackTarget != null) {
+			if (rc.isActive() && attackTarget.distanceSquaredTo(theirHQ) <= 5 && here.distanceSquaredTo(theirHQ) <= 35) {
+				harrassTheirHQ();
+				return;
+			} else {
+				Nav.goTo(attackTarget, Nav.Sneak.NO, navEngage);
+				if (rc.isActive() && visibleEnemies.length > 0) fight();
+				return;
+			}
+		}
+
+		// See if we should build something
+		maybeBuildSomething();
+
+		// Build or defend a pastr
+		buildOrDefendPastr();
+	}
+
+	// Decide whether to behave aggressively or defensively. Only be aggressive if we are in attack mode
+	// and there is a decent number of allies around, or if we are in any mode and we have a big numbers advantage
+	private MicroStance chooseMicroStance(MapLocation attackTarget) throws GameActionException {
+		if (Strategy.active == Strategy.HQ_PASTR) return MicroStance.HARRASS;
+
 		if (visibleEnemies.length == 0) {
-			stance = MicroStance.AGGRESSIVE; // stance doesn't matter if there are no enemies
+			return MicroStance.AGGRESSIVE; // stance doesn't matter if there are no enemies
 		} else {
 			int numAllies = 1; // us
 			numAllies += Math.max(numOtherAlliedSoldiersInRange(here, RobotType.SOLDIER.sensorRadiusSquared),
 					numOtherAlliedSoldiersInRange(Util.closest(visibleEnemies, here), 16));
 
 			if (attackTarget == null) {
-				if (numAllies >= visibleEnemies.length * 2 || numAllies > visibleEnemies.length + 3) stance = MicroStance.AGGRESSIVE;
-				else stance = MicroStance.DEFENSIVE;
+				if (numAllies >= visibleEnemies.length * 2 || numAllies > visibleEnemies.length + 3) return MicroStance.AGGRESSIVE;
+				else return MicroStance.DEFENSIVE;
 			} else {
-				if (numAllies >= 2 && numAllies >= visibleEnemies.length - 1) stance = MicroStance.AGGRESSIVE;
-				else stance = MicroStance.DEFENSIVE;
+				if (numAllies >= 2 && numAllies >= visibleEnemies.length - 1) return MicroStance.AGGRESSIVE;
+				else return MicroStance.DEFENSIVE;
 			}
 		}
-		Nav.Engage navEngage = stance == MicroStance.AGGRESSIVE ? Nav.Engage.YES : Nav.Engage.NO;
+	}
 
-		// If there are enemies in attack range, fight!
-		if (attackableEnemies.length > 0 && rc.isActive()) {
-			fight(stance);
-			return;
+	private void maybeBuildSomething() throws GameActionException {
+		switch (Strategy.active) {
+			case NOISE_THEN_ONE_PASTR:
+				if (spawnOrder == 1 && tryBuildNoiseTowerFast()) return;
+				break;
+
+			case ONE_PASTR_THEN_NOISE:
+				if (tryBuildNoiseTower()) return;
+				break;
+
 		}
+	}
 
-		// If we are in attack mode, move toward the attack target and engage.
-		if (attackTarget != null) {
-			Nav.goTo(attackTarget, Nav.Sneak.NO, navEngage);
-			return;
-		}
-
-		// See if we should build a noise tower
-		// if (tryBuildNoiseTower()) return;
-		if (spawnOrder == 1) {
-			if (tryBuildNoiseTowerFast()) return;
-		}
-
-		// Build or defend a pastr
+	private void buildOrDefendPastr() throws GameActionException {
 		MapLocation desiredPastrLoc = MessageBoard.BEST_PASTR_LOC.readMapLocation();
 		if (desiredPastrLoc != null) {
 			if (here.equals(desiredPastrLoc)) {
@@ -82,10 +116,13 @@ public class BotSoldier extends Bot {
 				// Go to the pastr location and fight if necessary
 				int distSq = here.distanceSquaredTo(desiredPastrLoc);
 				if (distSq <= 8 && visibleEnemies.length > 0) {
-					if (rc.isActive()) fight(stance);
+					if (rc.isActive()) fight();
 				} else {
 					Nav.Sneak navSneak = distSq <= 30 && visibleEnemies.length == 0 && rc.sensePastrLocations(us).length > 0 ? Nav.Sneak.YES : Nav.Sneak.NO;
 					Nav.goTo(desiredPastrLoc, navSneak, navEngage);
+
+					// If we didn't move, consider fighting
+					if (rc.isActive() && visibleEnemies.length > 0) fight();
 				}
 			}
 		}
@@ -97,9 +134,13 @@ public class BotSoldier extends Bot {
 		if (pastrLoc == null) return false;
 		if (!here.isAdjacentTo(pastrLoc)) return false;
 
+		constructNoiseTower(pastrLoc);
+		return true;
+	}
+
+	private void constructNoiseTower(MapLocation pastrLoc) throws GameActionException {
 		rc.construct(RobotType.NOISETOWER);
 		HerdPattern.computeAndPublish(here, pastrLoc, HerdPattern.Band.ONE, rc);
-		return true;
 	}
 
 	// After a little while, if nothing has gone wrong, if we are next to a pastr and no one
@@ -127,8 +168,8 @@ public class BotSoldier extends Bot {
 		}
 
 		// Construct the noise tower and advertise the fact that we are doing it
-		rc.construct(RobotType.NOISETOWER);
 		MessageBoard.BUILDING_NOISE_TOWER.writeMapLocation(here);
+		constructNoiseTower(ourPastrs[0]);
 		return true;
 	}
 
@@ -200,50 +241,55 @@ public class BotSoldier extends Bot {
 
 	// fight() should be called as a result of being forced into combat.
 	// After fight(), don't do anything except return.
-	private void fight(MicroStance stance) throws GameActionException {
+	private void fight() throws GameActionException {
 		Debug.indicate("micro", 0, String.format("numVisibleEnemies = %d; numAttackableEnemies = %d", visibleEnemies.length, attackableEnemies.length));
 
 		if (attackableEnemies.length != 0) { // There is at least one enemy in attack range (which should hopefully not be their HQ)
 			int numAttackableSoldiers = Util.countSoldiers(attackableEnemies);
 			if (numAttackableSoldiers >= 1) {
-				// Decide whether to attack, retreat, or reposition
-				if (numAttackableSoldiers >= 2) { // We're getting double-teamed!!
-					// retreat unless one of our attackers is also getting double-teamed just as bad
-					boolean anEnemyIsDoubleTeamed = false;
-					for (int i = attackableEnemies.length; i-- > 0;) {
-						if (attackableEnemies[i].type != RobotType.SOLDIER) continue; // don't care if non-soldier enemies are double-teamed
-						MapLocation enemyLoc = attackableEnemies[i].location;
+				if (stance == MicroStance.HARRASS) {
+					retreatOrFight();
+					return;
+				} else {
+					// Decide whether to attack, retreat, or reposition
+					if (numAttackableSoldiers >= 2) { // We're getting double-teamed!!
+						// retreat unless one of our attackers is also getting double-teamed just as bad
+						boolean anEnemyIsDoubleTeamed = false;
+						for (int i = attackableEnemies.length; i-- > 0;) {
+							if (attackableEnemies[i].type != RobotType.SOLDIER) continue; // don't care if non-soldier enemies are double-teamed
+							MapLocation enemyLoc = attackableEnemies[i].location;
+							// TODO: count of allies should really only count soldiers
+							anEnemyIsDoubleTeamed |= numOtherAlliedSoldiersInAttackRange(enemyLoc) >= 1;
+							if (anEnemyIsDoubleTeamed) break;
+						}
+						if (anEnemyIsDoubleTeamed) { // Fight!
+							Debug.indicate("micro", 1, "double-teamed, but so is an enemy: fighting");
+							attackASoldier();
+							return;
+						} else { // no enemy is double-teamed. Retreat!
+							Debug.indicate("micro", 1, "double-teamed: retreating");
+							retreatOrFight();
+							return;
+						}
+					} else { // We're not getting double-teamed. We're within attack range of exactly one soldier
+						// Fight on if we are winning the 1v1 or if the other guy is double-teamed. Otherwise retreat
+						// But if we are in aggressive mode, never retreat!
+						// First find the single enemy
+						RobotInfo enemySoldier = findASoldier(attackableEnemies);
 						// TODO: count of allies should really only count soldiers
-						anEnemyIsDoubleTeamed |= numOtherAlliedSoldiersInAttackRange(enemyLoc) >= 1;
-						if (anEnemyIsDoubleTeamed) break;
-					}
-					if (anEnemyIsDoubleTeamed) { // Fight!
-						Debug.indicate("micro", 1, "double-teamed, but so is an enemy: fighting");
-						attackASoldier();
-						return;
-					} else { // no enemy is double-teamed. Retreat!
-						Debug.indicate("micro", 1, "double-teamed: retreating");
-						retreatOrFight();
-						return;
-					}
-				} else { // We're not getting double-teamed. We're within attack range of exactly one soldier
-					// Fight on if we are winning the 1v1 or if the other guy is double-teamed. Otherwise retreat
-					// But if we are in aggressive mode, never retreat!
-					// First find the single enemy
-					RobotInfo enemySoldier = findASoldier(attackableEnemies);
-					// TODO: count of allies should really only count soldiers
-					if (stance == MicroStance.AGGRESSIVE || enemySoldier.health <= rc.getHealth() || enemySoldier.constructingRounds > 0
-							|| numOtherAlliedSoldiersInAttackRange(enemySoldier.location) >= 1) {
-						// Kill him!
-						Debug.indicate("micro", 1, "winning vs single enemy: fighting");
-						attackAndRecord(enemySoldier);
-						return;
-					} else {
-						// retreat!
-						Debug.indicate("micro", 1, "losing vs single enemy: retreating (numOtherAllies in range of " + enemySoldier.location.toString()
-								+ ") is " + numOtherAlliedSoldiersInAttackRange(enemySoldier.location));
-						retreatOrFight();
-						return;
+						if (stance == MicroStance.AGGRESSIVE || enemySoldier.health <= rc.getHealth() || enemySoldier.constructingRounds > 0
+								|| numOtherAlliedSoldiersInAttackRange(enemySoldier.location) >= 1) {
+							// Kill him!
+							Debug.indicate("micro", 1, "winning vs single enemy: fighting");
+							attackAndRecord(enemySoldier);
+							return;
+						} else {
+							// retreat!
+							Debug.indicate("micro", 1, "losing vs single enemy: retreating (numOtherAllies in range of " + enemySoldier.location.toString()
+									+ ") is " + numOtherAlliedSoldiersInAttackRange(enemySoldier.location));
+							retreatOrFight();
+							return;
+						}
 					}
 				}
 			} else { // can't attack a soldier
@@ -282,10 +328,15 @@ public class BotSoldier extends Bot {
 				// For now we are just going to stand off and move towards the nearest enemy as long as we don't engage.
 				// TODO: we can safely engage single robots with large enough actionDelay if we do it orthogonally
 				MapLocation closestSoldier = Util.closestSoldier(visibleEnemies, here);
-				// We deliberately count allied buildings below so that we are more aggressively about engaging enemies who attack our buildings
-				int maxEnemyExposure = numOtherAlliedUnitsInAttackRange(closestSoldier);
-				cautiouslyApproachVisibleEnemySoldier(closestSoldier, maxEnemyExposure);
-				return;
+				if (stance == MicroStance.HARRASS) {
+					harrassToward(closestSoldier);
+					return;
+				} else {
+					// We deliberately count allied buildings below so that we are more aggressively about engaging enemies who attack our buildings
+					int maxEnemyExposure = numOtherAlliedUnitsInAttackRange(closestSoldier);
+					cautiouslyApproachVisibleEnemySoldier(closestSoldier, maxEnemyExposure);
+					return;
+				}
 			} else { // Can't see a soldier, only buildings.
 				// Make sure we aren't just seeing the HQ
 				boolean canSeeBuilding = visibleEnemies.length > 2 || visibleEnemies[0].type != RobotType.HQ;
@@ -314,7 +365,7 @@ public class BotSoldier extends Bot {
 			}
 		}
 	}
-
+	
 	private void cautiouslyApproachVisibleEnemySoldier(MapLocation enemySoldier, int maxEnemyExposure) throws GameActionException {
 		int[] numEnemiesAttackingDirs = countNumEnemiesAttackingMoveDirs();
 
@@ -331,6 +382,39 @@ public class BotSoldier extends Bot {
 			rc.move(tryDir);
 			return;
 		}
+		Debug.indicate("micro", 1, "can't safely approach enemy soldier");
+	}
+	
+	private void harrassTheirHQ() throws GameActionException {
+		harrassToward(theirHQ);
+	}
+
+	private void harrassToward(MapLocation enemySoldier) throws GameActionException {
+		Direction toEnemy = here.directionTo(enemySoldier);
+
+		if (FastRandom.randInt(5) == 0 && numOtherAlliedSoldiersInRange(here.add(toEnemy, 2), 1) == 0) {
+			rc.attackSquare(here.add(toEnemy, 2));
+			return;
+		}
+
+		int[] numEnemiesAttackingDirs = countNumEnemiesAttackingMoveDirs();
+
+		Direction[] tryDirs;
+		if (FastRandom.randInt(2) == 0) tryDirs = new Direction[] { toEnemy, toEnemy.rotateLeft(), toEnemy.rotateRight(), toEnemy.rotateLeft().rotateLeft(),
+				toEnemy.rotateRight().rotateRight() };
+		else tryDirs = new Direction[] { toEnemy, toEnemy.rotateLeft(), toEnemy.rotateRight() };
+		for (int i = 0; i < tryDirs.length; i++) {
+			Direction tryDir = tryDirs[i];
+			if (!rc.canMove(tryDir)) continue;
+			if (numEnemiesAttackingDirs[tryDir.ordinal()] > 0) continue;
+			if (Util.inHQAttackRange(here.add(tryDir), theirHQ)) continue;
+			Debug.indicate("micro", 1, String.format("harassing enemy soldier; direction %d; attackers = %d %d %d %d %d %d %d %d", tryDir.ordinal(),
+					numEnemiesAttackingDirs[0], numEnemiesAttackingDirs[1], numEnemiesAttackingDirs[2], numEnemiesAttackingDirs[3], numEnemiesAttackingDirs[4],
+					numEnemiesAttackingDirs[5], numEnemiesAttackingDirs[6], numEnemiesAttackingDirs[7]));
+			rc.move(tryDir);
+			return;
+		}
+		rc.attackSquare(here.add(toEnemy, 2));
 		Debug.indicate("micro", 1, "can't safely approach enemy soldier");
 	}
 

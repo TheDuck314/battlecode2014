@@ -28,6 +28,7 @@ public class BotHQ extends Bot {
 
 	MapLocation[] theirPastrs;
 	MapLocation[] ourPastrs;
+	RobotInfo[] allAllies;
 
 	// Used for pastr placement
 	double[][] cowGrowth;
@@ -51,7 +52,7 @@ public class BotHQ extends Bot {
 
 		attackEnemies();
 
-		directStrategyMacro();
+		directStrategy();
 
 		// Use spare bytecodes to do pathing computations
 		MapLocation pathingDest;
@@ -94,10 +95,11 @@ public class BotHQ extends Bot {
 		maxEnemySoldiers = maxEnemySpawns - numEnemyPastrs;
 
 		numAlliedSoldiers = 0;
-		Robot[] alliedUnits = rc.senseNearbyGameObjects(Robot.class, 999999, us);
-		for (int i = alliedUnits.length; i-- > 0;) {
-			Robot unit = alliedUnits[i];
-			RobotInfo info = rc.senseRobotInfo(unit);
+		Robot[] allAlliedRobots = rc.senseNearbyGameObjects(Robot.class, 999999, us);
+		allAllies = new RobotInfo[allAlliedRobots.length];
+		for (int i = allAlliedRobots.length; i-- > 0;) {
+			RobotInfo info = rc.senseRobotInfo(allAlliedRobots[i]);
+			allAllies[i] = info;
 			if (info.type == RobotType.SOLDIER) numAlliedSoldiers++;
 		}
 
@@ -105,13 +107,39 @@ public class BotHQ extends Bot {
 		theirMilk = rc.senseTeamMilkQuantity(them);
 	}
 
+	private void directStrategy() throws GameActionException {
+		switch (Strategy.active) {
+			case NOISE_THEN_ONE_PASTR:
+			case ONE_PASTR_THEN_NOISE:
+				directStrategyOnePastr();
+				break;
+
+			case HQ_PASTR:
+			case RUSH:
+				directStrategyRush();
+				break;
+
+			case MACRO:
+				break;
+
+			default:
+				System.out.println("Uh oh! Unknown strategy!");
+				break;
+		}
+	}
+
 	private void directStrategyRush() throws GameActionException {
-		attackModeTarget = Util.closest(theirPastrs, ourHQ);
-		if (attackModeTarget == null) attackModeTarget = new MapLocation(rc.getMapWidth() / 2, rc.getMapHeight() / 2);
+		attackModeTarget = chooseEnemyPastrAttackTarget();
+		if (attackModeTarget == null) { // rally toward center if there are no enemy pastrs
+			attackModeTarget = new MapLocation(rc.getMapWidth() / 2, rc.getMapHeight() / 2);
+			while (rc.senseTerrainTile(attackModeTarget) == TerrainTile.VOID) {
+				attackModeTarget = attackModeTarget.add(attackModeTarget.directionTo(ourHQ));
+			}
+		}
 		MessageBoard.ATTACK_LOC.writeMapLocation(attackModeTarget);
 	}
 
-	private void directStrategyMacro() throws GameActionException {
+	private void directStrategyOnePastr() throws GameActionException {
 		// Decided whether to trigger attack mode
 		if (!attackModeTriggered) {
 			if (numEnemyPastrs >= 2) {
@@ -132,10 +160,44 @@ public class BotHQ extends Bot {
 		}
 
 		if (attackModeTriggered) {
-			attackModeTarget = Util.closest(theirPastrs, ourHQ);
-			if (attackModeTarget == null) attackModeTarget = theirHQ; // if they have no pastrs, camp their spawn
+			attackModeTarget = chooseEnemyPastrAttackTarget();
+			if (attackModeTarget == null && ourPastrs.length > 0) attackModeTarget = theirHQ; // if they have no pastrs, camp their spawn
 			MessageBoard.ATTACK_LOC.writeMapLocation(attackModeTarget);
 		}
+	}
+
+	private MapLocation findSoldierCenterOfMass() {
+		int x = 0;
+		int y = 0;
+		int N = 0;
+		for (int i = allAllies.length; i-- > 0;) {
+			RobotInfo ally = allAllies[i];
+			if (ally.type == RobotType.SOLDIER) {
+				MapLocation allyLoc = ally.location;
+				x += allyLoc.x;
+				y += allyLoc.y;
+				N++;
+			}
+		}
+		return new MapLocation(x / N, y / N);
+	}
+
+	private MapLocation chooseEnemyPastrAttackTarget() {
+		MapLocation soldierCenter = findSoldierCenterOfMass();
+
+		int bestDifficulty = 999999;
+		MapLocation bestTarget = null;
+		for (int i = theirPastrs.length; i-- > 0;) {
+			MapLocation pastr = theirPastrs[i];
+			int difficulty = pastr.distanceSquaredTo(soldierCenter); // could be as high as 10000
+			int distSqToTheirHQ = pastr.distanceSquaredTo(theirHQ);
+			if (distSqToTheirHQ <= 5) difficulty += 10000 * distSqToTheirHQ; // save pastrs near HQ for last
+			if (difficulty < bestDifficulty) {
+				bestDifficulty = difficulty;
+				bestTarget = pastr;
+			}
+		}
+		return bestTarget;
 	}
 
 	// TODO: this takes a little too long on
@@ -226,15 +288,31 @@ public class BotHQ extends Bot {
 
 	private boolean spawnSoldier() throws GameActionException {
 		if (rc.senseRobotCount() >= GameConstants.MAX_ROBOTS) return false;
-		//if (rc.senseRobotCount() >= 2) return false;
+		// if (rc.senseRobotCount() >= 2) return false;
 
-		Direction dir = Util.opposite(ourHQ.directionTo(theirHQ)).rotateLeft();
+		int spawnCount = MessageBoard.SPAWN_COUNT.readInt();
+
+		Direction dir = here.directionTo(theirHQ);
 		for (int i = 8; i-- > 0;) {
 			if (rc.canMove(dir)) {
-				rc.spawn(dir);
-				MessageBoard.SPAWN_COUNT.incrementInt();
-				return true;
-			} else {
+				// Don't put base noise tower or pastr on diagonals, or we might hit them with splash when we kill soldiers that try to attack them.
+				if (!(spawnCount <= 1 && dir.isDiagonal())) {
+					rc.spawn(dir);
+					MessageBoard.SPAWN_COUNT.writeInt(spawnCount + 1);
+					return true;
+				}
+			}
+			dir = dir.rotateRight();
+		}
+
+		// Try diagonals if necessary
+		if (spawnCount <= 1) {
+			for (int i = 8; i-- > 0;) {
+				if (rc.canMove(dir)) {
+					rc.spawn(dir);
+					MessageBoard.SPAWN_COUNT.writeInt(spawnCount + 1);
+					return true;
+				}
 				dir = dir.rotateRight();
 			}
 		}
