@@ -3,10 +3,13 @@ package framework;
 import battlecode.common.*;
 
 public class BotSoldier extends Bot {
-	public BotSoldier(RobotController theRC) {
+	public BotSoldier(RobotController theRC) throws GameActionException {
 		super(theRC);
-		Debug.init(theRC, "micro");
+		Debug.init(theRC, "buildorder");
 		Nav.init(theRC);
+
+		spawnOrder = MessageBoard.SPAWN_COUNT.readInt();
+		Debug.indicate("buildorder", 0, "I am robot #" + spawnOrder);
 	}
 
 	private enum MicroStance {
@@ -15,14 +18,18 @@ public class BotSoldier extends Bot {
 
 	RobotInfo[] visibleEnemies; // enemies within vision radius (35)
 	RobotInfo[] attackableEnemies; // enemies within attack radius(10)
+	int spawnOrder;
 
 	public void turn() throws GameActionException {
 		if (rc.getConstructingRounds() > 0) return; // can't do anything while constructing
 
+		// if(spawnOrder == 1) rc.construct(RobotType.NOISETOWER);
+		// if(spawnOrder == 2) rc.construct(RobotType.PASTR);
+
 		updateEnemyData();
 
 		// If we have an attack target, go to that target and kill things
-		MapLocation attackTarget = MessageBoard.ATTACK_LOC.readMapLocation(rc);
+		MapLocation attackTarget = MessageBoard.ATTACK_LOC.readMapLocation();
 
 		// Decide whether to behave aggressively or defensively. Only be aggressive if we are in attack mode
 		// and there is a decent number of allies around, or if we are in any mode and we have a big numbers advantage
@@ -57,10 +64,13 @@ public class BotSoldier extends Bot {
 		}
 
 		// See if we should build a noise tower
-		if (tryBuildNoiseTower()) return;
+		// if (tryBuildNoiseTower()) return;
+		if (spawnOrder == 1) {
+			if (tryBuildNoiseTowerFast()) return;
+		}
 
 		// Build or defend a pastr
-		MapLocation desiredPastrLoc = MessageBoard.BEST_PASTR_LOC.readMapLocation(rc);
+		MapLocation desiredPastrLoc = MessageBoard.BEST_PASTR_LOC.readMapLocation();
 		if (desiredPastrLoc != null) {
 			if (here.equals(desiredPastrLoc)) {
 				// We get to build the pastr!
@@ -81,6 +91,17 @@ public class BotSoldier extends Bot {
 		}
 	}
 
+	private boolean tryBuildNoiseTowerFast() throws GameActionException {
+		if (!rc.isActive()) return false;
+		MapLocation pastrLoc = MessageBoard.BEST_PASTR_LOC.readMapLocation();
+		if (pastrLoc == null) return false;
+		if (!here.isAdjacentTo(pastrLoc)) return false;
+
+		rc.construct(RobotType.NOISETOWER);
+		HerdPattern.computeAndPublish(here, pastrLoc, HerdPattern.Band.ONE, rc);
+		return true;
+	}
+
 	// After a little while, if nothing has gone wrong, if we are next to a pastr and no one
 	// else is building or has built a noise tower, build one.
 	private boolean tryBuildNoiseTower() throws GameActionException {
@@ -98,7 +119,7 @@ public class BotSoldier extends Bot {
 		if (ourPastrs.length == 0 || !here.isAdjacentTo(ourPastrs[0])) return false;
 
 		// Check if someone else is already building a noise tower
-		MapLocation existingBuilder = MessageBoard.BUILDING_NOISE_TOWER.readMapLocation(rc);
+		MapLocation existingBuilder = MessageBoard.BUILDING_NOISE_TOWER.readMapLocation();
 		if (existingBuilder != null) {
 			if (rc.senseNearbyGameObjects(Robot.class, existingBuilder, 1, us).length > 0) {
 				return false;
@@ -107,7 +128,7 @@ public class BotSoldier extends Bot {
 
 		// Construct the noise tower and advertise the fact that we are doing it
 		rc.construct(RobotType.NOISETOWER);
-		MessageBoard.BUILDING_NOISE_TOWER.writeMapLocation(here, rc);
+		MessageBoard.BUILDING_NOISE_TOWER.writeMapLocation(here);
 		return true;
 	}
 
@@ -261,7 +282,7 @@ public class BotSoldier extends Bot {
 				// For now we are just going to stand off and move towards the nearest enemy as long as we don't engage.
 				// TODO: we can safely engage single robots with large enough actionDelay if we do it orthogonally
 				MapLocation closestSoldier = Util.closestSoldier(visibleEnemies, here);
-				//We deliberately count allied buildings below so that we are more aggressively about engaging enemies who attack our buildings
+				// We deliberately count allied buildings below so that we are more aggressively about engaging enemies who attack our buildings
 				int maxEnemyExposure = numOtherAlliedUnitsInAttackRange(closestSoldier);
 				cautiouslyApproachVisibleEnemySoldier(closestSoldier, maxEnemyExposure);
 				return;
@@ -291,20 +312,6 @@ public class BotSoldier extends Bot {
 					return;
 				}
 			}
-		}
-	}
-
-	private void tryMoveToward(MapLocation loc) throws GameActionException {
-		Direction toward = here.directionTo(loc);
-		Direction[] tryDirs = new Direction[] { toward, toward.rotateLeft(), toward.rotateRight() };
-		for (int i = 0; i < tryDirs.length; i++) {
-			Direction tryDir = tryDirs[i];
-			if (!rc.canMove(tryDir)) continue;
-			if (rc.getActionDelay() >= 0.2 && tryDir.isDiagonal()) continue; // Diagonal movement costs 2.8 actiondelay, so could result in an extra sitting
-																				// duck turn
-			if (Util.inHQAttackRange(here.add(tryDir), theirHQ)) continue;
-			rc.move(tryDir);
-			return;
 		}
 	}
 
@@ -349,12 +356,6 @@ public class BotSoldier extends Bot {
 	private int numOtherAlliedUnitsInRange(MapLocation loc, int rangeSq) throws GameActionException {
 		Robot[] allies = rc.senseNearbyGameObjects(Robot.class, loc, rangeSq, us);
 		return allies.length;
-	}
-
-	// TODO: this function counts buildings as enemies :( Consider fixing this
-	// This function costs at least 100 bytecodes!
-	private int numEnemiesInAttackRange(MapLocation loc) {
-		return rc.senseNearbyGameObjects(Robot.class, loc, RobotType.SOLDIER.attackRadiusMaxSquared, them).length;
 	}
 
 	private RobotInfo findASoldier(RobotInfo[] infos) {
@@ -563,10 +564,10 @@ public class BotSoldier extends Bot {
 
 		return null;
 	}
-	
+
 	private void attackAndRecord(RobotInfo enemyInfo) throws GameActionException {
-		if(enemyInfo == null) return; //should never happen, but just to be sure
+		if (enemyInfo == null) return; // should never happen, but just to be sure
 		rc.attackSquare(enemyInfo.location);
-		if(enemyInfo.health <= RobotType.SOLDIER.attackPower) MessageBoard.ROUND_KILL_COUNT.incrementInt(rc);
+		if (enemyInfo.health <= RobotType.SOLDIER.attackPower) MessageBoard.ROUND_KILL_COUNT.incrementInt();
 	}
 }

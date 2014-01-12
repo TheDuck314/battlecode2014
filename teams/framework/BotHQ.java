@@ -63,19 +63,12 @@ public class BotHQ extends Bot {
 	}
 
 	private void doFirstTurn() throws GameActionException {
-		initMessageBoard();
+		MessageBoard.setDefaultChannelValues();
 		spawnSoldier();
 
 		computePastrScores();
 		computeBestPastrLocation();
-		MessageBoard.BEST_PASTR_LOC.writeMapLocation(computedBestPastrLocation, rc);
-	}
-
-	private void initMessageBoard() throws GameActionException {
-		MessageBoard.BEST_PASTR_LOC.writeMapLocation(null, rc);
-		MessageBoard.ATTACK_LOC.writeMapLocation(null, rc);
-		MessageBoard.BUILDING_NOISE_TOWER.writeMapLocation(null, rc);
-		MessageBoard.ROUND_KILL_COUNT.writeInt(0, rc);
+		MessageBoard.BEST_PASTR_LOC.writeMapLocation(computedBestPastrLocation);
 	}
 
 	// Guess how many bots the opponent has
@@ -87,8 +80,8 @@ public class BotHQ extends Bot {
 		ourPastrs = rc.sensePastrLocations(us);
 		numAlliedPastrs = ourPastrs.length;
 
-		int numKillsLastTurn = MessageBoard.ROUND_KILL_COUNT.readInt(rc);
-		MessageBoard.ROUND_KILL_COUNT.writeInt(0, rc);
+		int numKillsLastTurn = MessageBoard.ROUND_KILL_COUNT.readInt();
+		MessageBoard.ROUND_KILL_COUNT.writeInt(0);
 		maxEnemySpawns -= numKillsLastTurn;
 
 		virtualSpawnCountdown--;
@@ -115,7 +108,7 @@ public class BotHQ extends Bot {
 	private void directStrategyRush() throws GameActionException {
 		attackModeTarget = Util.closest(theirPastrs, ourHQ);
 		if (attackModeTarget == null) attackModeTarget = new MapLocation(rc.getMapWidth() / 2, rc.getMapHeight() / 2);
-		MessageBoard.ATTACK_LOC.writeMapLocation(attackModeTarget, rc);
+		MessageBoard.ATTACK_LOC.writeMapLocation(attackModeTarget);
 	}
 
 	private void directStrategyMacro() throws GameActionException {
@@ -141,7 +134,7 @@ public class BotHQ extends Bot {
 		if (attackModeTriggered) {
 			attackModeTarget = Util.closest(theirPastrs, ourHQ);
 			if (attackModeTarget == null) attackModeTarget = theirHQ; // if they have no pastrs, camp their spawn
-			MessageBoard.ATTACK_LOC.writeMapLocation(attackModeTarget, rc);
+			MessageBoard.ATTACK_LOC.writeMapLocation(attackModeTarget);
 		}
 	}
 
@@ -216,29 +209,30 @@ public class BotHQ extends Bot {
 				target = target.add(target.directionTo(here));
 				directDamage = 0;
 			}
-			
+
 			int enemiesSplashed = rc.senseNearbyGameObjects(Robot.class, target, 2, them).length;
 			int alliesSplashed = rc.senseNearbyGameObjects(Robot.class, target, 2, us).length;
 			double netSplashDamage = RobotType.HQ.splashPower * (enemiesSplashed - alliesSplashed);
 			double totalDamage = directDamage + netSplashDamage;
-			if(totalDamage > bestTotalDamage) {
+			if (totalDamage > bestTotalDamage) {
 				bestTotalDamage = totalDamage;
 				bestTarget = target;
 			}
 		}
 
-		if(bestTarget != null) rc.attackSquare(bestTarget);
+		if (bestTarget != null) rc.attackSquare(bestTarget);
 		return true;
 	}
 
 	private boolean spawnSoldier() throws GameActionException {
-		// if (rc.senseRobotCount() >= GameConstants.MAX_ROBOTS) return false;
-		if (rc.senseRobotCount() >= 0) return false;
+		if (rc.senseRobotCount() >= GameConstants.MAX_ROBOTS) return false;
+		//if (rc.senseRobotCount() >= 2) return false;
 
 		Direction dir = Util.opposite(ourHQ.directionTo(theirHQ)).rotateLeft();
 		for (int i = 8; i-- > 0;) {
 			if (rc.canMove(dir)) {
 				rc.spawn(dir);
+				MessageBoard.SPAWN_COUNT.incrementInt();
 				return true;
 			} else {
 				dir = dir.rotateRight();
