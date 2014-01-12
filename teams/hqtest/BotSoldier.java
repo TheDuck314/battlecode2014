@@ -1,4 +1,4 @@
-package framework;
+package hqtest;
 
 import battlecode.common.*;
 
@@ -565,7 +565,6 @@ public class BotSoldier extends Bot {
 	}
 	
 	private void attackAndRecord(RobotInfo enemyInfo) throws GameActionException {
-		if(enemyInfo == null) return; //should never happen, but just to be sure
 		rc.attackSquare(enemyInfo.location);
 		if(enemyInfo.health <= RobotType.SOLDIER.attackPower) MessageBoard.ROUND_KILL_COUNT.incrementInt(rc);
 	}

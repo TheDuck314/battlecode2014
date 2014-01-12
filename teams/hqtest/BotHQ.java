@@ -1,11 +1,11 @@
-package framework;
+package hqtest;
 
 import battlecode.common.*;
 
 public class BotHQ extends Bot {
 	public BotHQ(RobotController theRC) {
 		super(theRC);
-		Debug.init(rc, "splash");
+		Debug.init(rc, "killcount");
 
 		hqSeparation = Math.sqrt(ourHQ.distanceSquaredTo(theirHQ));
 		cowGrowth = rc.senseCowGrowth();
@@ -119,30 +119,7 @@ public class BotHQ extends Bot {
 	}
 
 	private void directStrategyMacro() throws GameActionException {
-		// Decided whether to trigger attack mode
-		if (!attackModeTriggered) {
-			if (numEnemyPastrs >= 2) {
-				// if the enemy has overextended himself building pastrs, attack!
-				// The threshold to attack should be smaller on a smaller map because
-				// it will take less time to get there, so the opponent will have less time to
-				// mend his weakness.
-				int attackThreshold = 1 + (int) (hqSeparation / 40);
-				if (numAlliedSoldiers - maxEnemySoldiers >= attackThreshold) {
-					attackModeTriggered = true;
-				}
-			}
-
-			// if the enemy is out-milking us, then we need to attack or we are going to lose
-			if (theirMilk >= 0.4 * GameConstants.WIN_QTY && theirMilk > ourMilk) {
-				attackModeTriggered = true;
-			}
-		}
-
-		if (attackModeTriggered) {
-			attackModeTarget = Util.closest(theirPastrs, ourHQ);
-			if (attackModeTarget == null) attackModeTarget = theirHQ; // if they have no pastrs, camp their spawn
-			MessageBoard.ATTACK_LOC.writeMapLocation(attackModeTarget, rc);
-		}
+		MessageBoard.ATTACK_LOC.writeMapLocation(theirHQ, rc);
 	}
 
 	// TODO: this takes a little too long on
@@ -199,41 +176,18 @@ public class BotHQ extends Bot {
 	}
 
 	private boolean attackEnemies() throws GameActionException {
-		Robot[] enemies = rc.senseNearbyGameObjects(Robot.class, here, 25, them);
+		Robot[] enemies = rc.senseNearbyGameObjects(Robot.class, RobotType.HQ.attackRadiusMaxSquared, them);
 		if (enemies.length == 0) return false;
 
-		double bestTotalDamage = 0;
-		MapLocation bestTarget = null;
-		for (int i = enemies.length; i-- > 0;) {
-			RobotInfo info = rc.senseRobotInfo(enemies[i]);
-			MapLocation enemyLoc = info.location;
-			if (!Util.inHQAttackRange(enemyLoc, here)) continue;
-
-			int distSq = here.distanceSquaredTo(enemyLoc);
-			MapLocation target = enemyLoc;
-			double directDamage = RobotType.HQ.attackPower - RobotType.HQ.splashPower;
-			if (distSq > RobotType.HQ.attackRadiusMaxSquared) {
-				target = target.add(target.directionTo(here));
-				directDamage = 0;
-			}
-			
-			int enemiesSplashed = rc.senseNearbyGameObjects(Robot.class, target, 2, them).length;
-			int alliesSplashed = rc.senseNearbyGameObjects(Robot.class, target, 2, us).length;
-			double netSplashDamage = RobotType.HQ.splashPower * (enemiesSplashed - alliesSplashed);
-			double totalDamage = directDamage + netSplashDamage;
-			if(totalDamage > bestTotalDamage) {
-				bestTotalDamage = totalDamage;
-				bestTarget = target;
-			}
-		}
-
-		if(bestTarget != null) rc.attackSquare(bestTarget);
+		RobotInfo info = rc.senseRobotInfo(enemies[0]);
+		MapLocation target = info.location;
+		rc.attackSquare(target);
 		return true;
 	}
 
 	private boolean spawnSoldier() throws GameActionException {
-		// if (rc.senseRobotCount() >= GameConstants.MAX_ROBOTS) return false;
-		if (rc.senseRobotCount() >= 0) return false;
+		if (rc.senseRobotCount() >= GameConstants.MAX_ROBOTS) return false;
+		// if (rc.senseRobotCount() >= 1) return false;
 
 		Direction dir = Util.opposite(ourHQ.directionTo(theirHQ)).rotateLeft();
 		for (int i = 8; i-- > 0;) {
