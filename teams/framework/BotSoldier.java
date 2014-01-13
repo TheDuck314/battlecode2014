@@ -24,10 +24,11 @@ public class BotSoldier extends Bot {
 	int spawnOrder;
 
 	public void turn() throws GameActionException {
+		if (!rc.isActive()) return;
+		if (rc.getConstructingRounds() > 0) return; // can't do anything while constructing
+
 		Strategy.active = MessageBoard.STRATEGY.readStrategy();
 		if (Strategy.active == Strategy.UNDECIDED) return;
-
-		if (rc.getConstructingRounds() > 0) return; // can't do anything while constructing
 
 		if (Strategy.active == Strategy.HQ_PASTR) {
 			if (spawnOrder == 1) {
@@ -303,6 +304,16 @@ public class BotSoldier extends Bot {
 					// Need to decide whether to move to attack a soldier or attack the building
 					// For the moment, let's just attack a building.
 					// TODO: add some code that makes us move to support allies when appropriate
+					MapLocation closestSoldier = Util.closestSoldier(visibleEnemies, here);
+
+					int numAlliesFightingClosestEnemySoldier = numOtherAlliedSoldiersInAttackRange(closestSoldier);
+					if (numAlliesFightingClosestEnemySoldier > 0) {
+						// We deliberately count allied buildings below so that we are more aggressively about engaging enemies who attack our buildings
+						int maxEnemyExposure = numAlliesFightingClosestEnemySoldier;
+						if (stance == MicroStance.AGGRESSIVE && maxEnemyExposure > 0) maxEnemyExposure++;
+						cautiouslyApproachVisibleEnemySoldier(closestSoldier, maxEnemyExposure);
+						if (!rc.isActive()) return;
+					}
 					Debug.indicate("micro", 1, "can see a soldier, but preferring to attack a building");
 					attackABuilding();
 					return;
@@ -332,15 +343,15 @@ public class BotSoldier extends Bot {
 				// For now we are just going to stand off and move towards the nearest enemy as long as we don't engage.
 				// TODO: we can safely engage single robots with large enough actionDelay if we do it orthogonally
 				MapLocation closestSoldier = Util.closestSoldier(visibleEnemies, here);
-				if (stance == MicroStance.HARRASS) {
+				// We deliberately count allied buildings below so that we are more aggressively about engaging enemies who attack our buildings
+				int maxEnemyExposure = numOtherAlliedUnitsInAttackRange(closestSoldier);
+				if (stance == MicroStance.AGGRESSIVE && maxEnemyExposure > 0) maxEnemyExposure++;
+				cautiouslyApproachVisibleEnemySoldier(closestSoldier, maxEnemyExposure);
+				if (rc.isActive() && stance == MicroStance.HARRASS) {
 					harrassToward(closestSoldier);
 					return;
-				} else {
-					// We deliberately count allied buildings below so that we are more aggressively about engaging enemies who attack our buildings
-					int maxEnemyExposure = numOtherAlliedUnitsInAttackRange(closestSoldier);
-					cautiouslyApproachVisibleEnemySoldier(closestSoldier, maxEnemyExposure);
-					return;
 				}
+				return;
 			} else { // Can't see a soldier, only buildings.
 				// Make sure we aren't just seeing the HQ
 				boolean canSeeBuilding = visibleEnemies.length > 2 || visibleEnemies[0].type != RobotType.HQ;

@@ -39,6 +39,16 @@ public class BotNoiseTower extends Bot {
 
 	private void herdTowardPastrDumb() throws GameActionException {
 		MapLocation target = null;
+
+		int pastrX, pastrY;
+		if(pastr != null) {
+			pastrX = pastr.x;
+			pastrY = pastr.y;			
+		} else {
+			pastrX = here.x;
+			pastrY = here.y;
+		}
+		
 		do {
 			int dx = radius * attackDir.dx;
 			int dy = radius * attackDir.dy;
@@ -46,7 +56,7 @@ public class BotNoiseTower extends Bot {
 				dx = (int) (dx / 1.4);
 				dy = (int) (dy / 1.4);
 			}
-			target = new MapLocation(pastr.x + dx, pastr.y + dy);
+			target = new MapLocation(pastrX + dx, pastrY + dy);
 			attackDir = attackDir.rotateRight();
 			if (attackDir == Direction.NORTH) radius--;
 			if (radius <= 5) {

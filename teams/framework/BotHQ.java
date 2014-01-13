@@ -254,7 +254,7 @@ public class BotHQ extends Bot {
 				// The threshold to attack should be smaller on a smaller map because
 				// it will take less time to get there, so the opponent will have less time to
 				// mend his weakness.
-				double hqSeparation = Math.sqrt(ourHQ.distanceSquaredTo(theirHQ));				
+				// double hqSeparation = Math.sqrt(ourHQ.distanceSquaredTo(theirHQ));
 				int attackThreshold = 1;
 				if (numAlliedSoldiers - maxEnemySoldiers >= attackThreshold) {
 					attackModeTriggered = true;
