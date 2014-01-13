@@ -17,6 +17,7 @@ public abstract class Bot {
 		theirHQ = rc.senseEnemyHQLocation();
 
 		FastRandom.init();
+		MessageBoard.init(theRC);
 		Debug.init(rc, "pop");
 	}
 

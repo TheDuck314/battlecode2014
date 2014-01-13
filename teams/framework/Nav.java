@@ -6,6 +6,9 @@ public class Nav {
 	private static MapLocation dest;
 	private static RobotController rc;
 	private static boolean sneak = false;
+	private static boolean engage = false;
+
+	private static MapLocation enemyHQ; // we can't ever go too near the enemy HQ
 
 	private enum BugState {
 		DIRECT, BUG
@@ -15,10 +18,6 @@ public class Nav {
 		LEFT, RIGHT
 	}
 
-	public enum Sneak {
-		YES, NO
-	}
-	
 	private static BugState bugState;
 	private static WallSide bugWallSide = WallSide.LEFT;
 	private static int bugStartDistSq;
@@ -27,12 +26,15 @@ public class Nav {
 	private static int bugRotationCount;
 
 	private static boolean tryMoveDirect() throws GameActionException {
-		Direction toDest = rc.getLocation().directionTo(dest);
+		MapLocation here = rc.getLocation();
+		Direction toDest = here.directionTo(dest);
 		Direction[] tryDirs = new Direction[] { toDest, toDest.rotateLeft(), toDest.rotateRight() };
 		for (Direction tryDir : tryDirs) {
-			if (rc.canMove(tryDir)) {
-				move(tryDir);
-				return true;
+			if (canMoveSafely(tryDir)) {
+				if (engage || !moveEntersFight(tryDir)) {
+					move(tryDir);
+					return true;
+				}
 			}
 		}
 		return false;
@@ -45,10 +47,10 @@ public class Nav {
 		bugRotationCount = 0;
 	}
 
-	private static Direction findBugMoveDir() {
+	private static Direction findBugMoveDir() throws GameActionException {
 		Direction dir = bugLookStartDir;
 		for (int i = 8; i-- > 0;) {
-			if (rc.canMove(dir)) return dir;
+			if (canMoveSafely(dir) && (engage || !moveEntersFight(dir))) return dir;
 			dir = (bugWallSide == WallSide.LEFT ? dir.rotateRight() : dir.rotateLeft());
 		}
 		return null;
@@ -83,9 +85,9 @@ public class Nav {
 
 		if (bugLastMoveDir.isDiagonal()) {
 			if (bugWallSide == WallSide.LEFT) {
-				return !rc.canMove(bugLastMoveDir.rotateLeft());
+				return !canMoveSafely(bugLastMoveDir.rotateLeft());
 			} else {
-				return !rc.canMove(bugLastMoveDir.rotateRight());
+				return !canMoveSafely(bugLastMoveDir.rotateRight());
 			}
 		} else {
 			return true;
@@ -172,7 +174,7 @@ public class Nav {
 				int y = locY + dirsY[i];
 				if (x > 0 && y > 0 && x < mapWidth && y < mapHeight && !bfsWasQueued[x][y]) {
 					MapLocation newLoc = new MapLocation(x, y);
-					if (rc.senseTerrainTile(newLoc) != TerrainTile.VOID) {
+					if (rc.senseTerrainTile(newLoc) != TerrainTile.VOID && !Util.inHQAttackRange(newLoc, enemyHQ)) {
 						bfsPlan[x][y] = dirs[i];
 						// push newLoc onto queue
 						bfsQueue[bfsQueueTail] = newLoc;
@@ -186,31 +188,52 @@ public class Nav {
 
 	public static void init(RobotController theRC) {
 		rc = theRC;
+		enemyHQ = rc.senseEnemyHQLocation();
 	}
 
-	public static void goTo(MapLocation theDest, Sneak theSneak) throws GameActionException {
+	public enum Sneak {
+		YES, NO
+	}
+
+	public enum Engage {
+		YES, NO
+	}
+
+	public static void goTo(MapLocation theDest, Sneak theSneak, Engage theEngage) throws GameActionException {
 		sneak = (theSneak == Sneak.YES);
+		engage = (theEngage == Engage.YES);
 
 		if (!theDest.equals(dest)) {
 			dest = theDest;
 			bugState = BugState.DIRECT;
-			bfsInit(); // reset the BFS plan
+			// bfsInit(); // reset the BFS plan
 		}
 
 		MapLocation here = rc.getLocation();
 
 		if (here.equals(theDest)) return;
 
-		if (bfsPlan[here.x][here.y] == null) {
-			bfsBuildPlan();
-		}
+		// if (bfsPlan[here.x][here.y] == null) {
+		// bfsBuildPlan();
+		// }
 
 		if (!rc.isActive()) return;
 
-		Direction dir = bfsPlan[here.x][here.y];
-		if (dir != null && rc.canMove(dir)) {
+		// Direction dir = bfsPlan[here.x][here.y];
+		Direction dir = Bfs.readResult(here, dest, rc);
+		if (dir != null && !Util.inHQAttackRange(rc.getLocation().add(dir), enemyHQ)) {
 			Debug.indicate("nav", 0, "using bfs");
-			move(dir);
+			Direction[] tryDirs = new Direction[] { dir, dir.rotateLeft(), dir.rotateRight() };
+			boolean fight = false;
+			for (int i = 0; i < tryDirs.length; i++) {
+				Direction tryDir = tryDirs[i];
+				if (canMoveSafely(tryDir)) {
+					if (engage || !moveEntersFight(tryDir)) {
+						move(tryDir);
+						return;
+					}
+				}
+			}
 		} else {
 			Debug.indicate("nav", 0, "using bug");
 			bugTo(dest);
@@ -222,4 +245,16 @@ public class Nav {
 		else rc.move(dir);
 	}
 
+	private static boolean canMoveSafely(Direction dir) {
+		return rc.canMove(dir) && !Util.inHQAttackRange(rc.getLocation().add(dir), enemyHQ);
+	}
+
+	private static boolean moveEntersFight(Direction dir) throws GameActionException {
+		Robot[] engagedUnits = rc.senseNearbyGameObjects(Robot.class, rc.getLocation().add(dir), RobotType.SOLDIER.attackRadiusMaxSquared, rc.getTeam()
+				.opponent());
+		for (int i = engagedUnits.length; i-- > 0;) {
+			if (rc.senseRobotInfo(engagedUnits[i]).type == RobotType.SOLDIER) return true;
+		}
+		return false;
+	}
 }

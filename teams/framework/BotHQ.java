@@ -5,13 +5,12 @@ import battlecode.common.*;
 public class BotHQ extends Bot {
 	public BotHQ(RobotController theRC) {
 		super(theRC);
+		Debug.init(rc, "map");
 
-		hqSeparation = Math.sqrt(ourHQ.distanceSquaredTo(theirHQ));
 		cowGrowth = rc.senseCowGrowth();
 	}
 
 	// Strategic info
-	double hqSeparation;
 	int virtualSpawnCountdown = 0;
 	int maxEnemySpawns;
 	int numEnemyPastrs;
@@ -23,9 +22,11 @@ public class BotHQ extends Bot {
 	double theirMilk;
 
 	boolean attackModeTriggered = false;
+	MapLocation attackModeTarget = null;
 
 	MapLocation[] theirPastrs;
 	MapLocation[] ourPastrs;
+	RobotInfo[] allAllies;
 
 	// Used for pastr placement
 	double[][] cowGrowth;
@@ -50,31 +51,144 @@ public class BotHQ extends Bot {
 		attackEnemies();
 
 		directStrategy();
+
+		// Use spare bytecodes to do pathing computations
+		MapLocation pathingDest;
+		if (attackModeTarget != null) pathingDest = attackModeTarget;
+		else if (computedBestPastrLocation != null) pathingDest = computedBestPastrLocation;
+		else pathingDest = null;
+
+		if (pathingDest != null) Bfs.work(pathingDest, rc, 9000);
 	}
 
 	private void doFirstTurn() throws GameActionException {
-		initMessageBoard();
+		MessageBoard.setDefaultChannelValues();
 		spawnSoldier();
 
 		computePastrScores();
 		computeBestPastrLocation();
-		MessageBoard.BEST_PASTR_LOC.writeMapLocation(computedBestPastrLocation, rc);
+		MessageBoard.BEST_PASTR_LOC.writeMapLocation(computedBestPastrLocation);
+
+		Strategy.active = analyzeMap();
+		// Strategy.active = Strategy.NOISE_THEN_ONE_PASTR;
+		MessageBoard.STRATEGY.writeStrategy(Strategy.active);
+
+		Debug.indicate("map", 2, "going with " + Strategy.active.toString());
 	}
 
-	private void initMessageBoard() throws GameActionException {
-		MessageBoard.BEST_PASTR_LOC.writeMapLocation(null, rc);
-		MessageBoard.ATTACK_LOC.writeMapLocation(null, rc);
-		MessageBoard.BUILDING_NOISE_TOWER.writeMapLocation(null, rc);
+	private int guessTravelRounds(MapLocation start, MapLocation dest) {
+		int ret = (int) (GameConstants.SOLDIER_MOVE_ACTION_DELAY * Math.sqrt(start.distanceSquaredTo(dest)));
+		MapLocation probe = start;
+		boolean inObstacle = false;
+		int numObstacles = 0;
+		do {
+			probe = probe.add(probe.directionTo(theirHQ));
+			if (rc.senseTerrainTile(probe) == TerrainTile.VOID) {
+				if (!inObstacle) numObstacles++; // too big?
+				inObstacle = true;
+			} else {
+				inObstacle = false;
+			}
+		} while (!probe.equals(theirHQ));
+		ret += 25 * numObstacles;
+		return ret;
 	}
 
-	// Guess how many bots the opponent has
-	// TODO: account for pop cap
-	// TODO: record kills of enemy units
+	private double estimateNearbyCowGrowth(MapLocation loc) {
+		double ret = 0;
+		int minX = Math.max(0, loc.x - 10);
+		int minY = Math.max(0, loc.y - 10);
+		int maxX = Math.min(rc.getMapWidth() - 1, loc.x + 10);
+		int maxY = Math.min(rc.getMapHeight() - 1, loc.y + 10);
+		for (int x = minX; x <= maxX; x++) {
+			for (int y = minY; y <= maxY; y++) {
+				if (rc.senseTerrainTile(new MapLocation(x, y)) != TerrainTile.VOID) ret += cowGrowth[x][y];
+			}
+		}
+		return ret;
+	}
+
+	private int estimateTimeToWin(double totalCowGrowth) {
+		double equilibriumCowPopulation = totalCowGrowth / (1 - GameConstants.NEUTRALS_TURN_DECAY);
+		return (int) (GameConstants.WIN_QTY / (1 + equilibriumCowPopulation)); // avoid divide by zero!!
+	}
+
+	private double estimateHQHerdObstacleSlowdownFactor() {
+		double slowdownFactor = 1;
+		for (int i = 8; i-- > 0;) {
+			Direction dir = Direction.values()[i];
+			MapLocation loc = ourHQ;
+			for (int j = 10; j-- > 0;) {
+				loc = loc.add(dir);
+				if (rc.senseTerrainTile(loc) == TerrainTile.VOID) {
+					slowdownFactor += 0.25;
+					break;
+				}
+			}
+		}
+		return slowdownFactor;
+	}
+
+	private Strategy analyzeMap() throws GameActionException {
+		// Guess how long it would take the enemy to rush a well-placed pastr
+		MapLocation mapCenter = new MapLocation(rc.getMapWidth() / 2, rc.getMapHeight() / 2);
+		int openPastrRushRounds = guessTravelRounds(theirHQ, mapCenter) + guessTravelRounds(mapCenter, computedBestPastrLocation);
+
+		// my pathfinding rocks:
+		int pastrTravelDelay = (int) (GameConstants.SOLDIER_MOVE_ACTION_DELAY * Math.sqrt(ourHQ.distanceSquaredTo(computedBestPastrLocation)));
+		int pastrBuildDelay = (int) (GameConstants.HQ_SPAWN_DELAY_CONSTANT_1 + RobotType.PASTR.captureTurns); // how long it will take for our pastr to go up
+		openPastrRushRounds += pastrBuildDelay; // they can't rush until they know where to rush to
+
+		// Guess how many rounds it would take us to win with a noise tower in the open
+		double openPastrCowGrowth = estimateNearbyCowGrowth(computedBestPastrLocation);
+		int openPastrRoundsNeeded = estimateTimeToWin(openPastrCowGrowth);
+		int towerInefficiency = 150; // we don't start milking immediately, unfortunately
+		openPastrRoundsNeeded += towerInefficiency;
+		int fastTowerBuildDelay = RobotType.NOISETOWER.captureTurns + pastrTravelDelay; // account for the time needed to go there and set up a tower
+		int safeTowerBuildDelay = RobotType.NOISETOWER.captureTurns + Math.max(81, pastrTravelDelay); // account for the time needed to go there and set up a
+																										// tower and wait for them to make a pastr
+		int fastOpenPastrRoundsToWin = openPastrRoundsNeeded + fastTowerBuildDelay;
+		int safeOpenPastrRoundsToWin = openPastrRoundsNeeded + safeTowerBuildDelay;
+
+		// Guess how many rounds it would take us to win with a noise tower in the HQ
+		double hqPastrCowGrowth = estimateNearbyCowGrowth(ourHQ);
+		int hqPastrRoundsToWin = estimateTimeToWin(hqPastrCowGrowth);
+		double hqSlowdown = estimateHQHerdObstacleSlowdownFactor();
+		hqPastrRoundsToWin *= hqSlowdown;
+		hqPastrRoundsToWin += RobotType.NOISETOWER.captureTurns;
+		hqPastrRoundsToWin += towerInefficiency;
+
+		Debug.indicate("map", 0, String.format("fastOpenPastrRoundsToWin = %d, safeOpenPastrRoundsToWin = %d (cows = %f)", fastOpenPastrRoundsToWin,
+				safeOpenPastrRoundsToWin, openPastrCowGrowth));
+		Debug.indicate("map", 1, String.format("hqPastrRoundsToWin = %d (cows = %f, slowdown = %f), rushRounds = %d", hqPastrRoundsToWin, hqPastrCowGrowth,
+				hqSlowdown, openPastrRushRounds));
+
+		Strategy strat;
+
+		if (fastOpenPastrRoundsToWin < openPastrRushRounds) {
+			// I can't imagine this actually happening, but if we can win before the rush even gets to us
+			// then go for it!
+			strat = Strategy.NOISE_THEN_ONE_PASTR;
+		} else if (safeOpenPastrRoundsToWin < hqPastrRoundsToWin) {
+			// otherwise we probably have to decide between a safe open pastr and an HQ pastr.
+			// Go open pastr only if is significantly faster
+			strat = Strategy.ONE_PASTR_THEN_NOISE;
+		} else {
+			strat = Strategy.HQ_PASTR;
+		}
+
+		return strat;
+	}
+
 	private void updateStrategicInfo() throws GameActionException {
 		theirPastrs = rc.sensePastrLocations(them);
 		numEnemyPastrs = theirPastrs.length;
 		ourPastrs = rc.sensePastrLocations(us);
 		numAlliedPastrs = ourPastrs.length;
+
+		int numKillsLastTurn = MessageBoard.ROUND_KILL_COUNT.readInt();
+		MessageBoard.ROUND_KILL_COUNT.writeInt(0);
+		maxEnemySpawns -= numKillsLastTurn;
 
 		virtualSpawnCountdown--;
 		if (virtualSpawnCountdown <= 0) {
@@ -86,10 +200,11 @@ public class BotHQ extends Bot {
 		maxEnemySoldiers = maxEnemySpawns - numEnemyPastrs;
 
 		numAlliedSoldiers = 0;
-		Robot[] alliedUnits = rc.senseNearbyGameObjects(Robot.class, 999999, us);
-		for (int i = alliedUnits.length; i-- > 0;) {
-			Robot unit = alliedUnits[i];
-			RobotInfo info = rc.senseRobotInfo(unit);
+		Robot[] allAlliedRobots = rc.senseNearbyGameObjects(Robot.class, 999999, us);
+		allAllies = new RobotInfo[allAlliedRobots.length];
+		for (int i = allAlliedRobots.length; i-- > 0;) {
+			RobotInfo info = rc.senseRobotInfo(allAlliedRobots[i]);
+			allAllies[i] = info;
 			if (info.type == RobotType.SOLDIER) numAlliedSoldiers++;
 		}
 
@@ -98,56 +213,143 @@ public class BotHQ extends Bot {
 	}
 
 	private void directStrategy() throws GameActionException {
+		switch (Strategy.active) {
+			case NOISE_THEN_ONE_PASTR:
+			case ONE_PASTR_THEN_NOISE:
+				directStrategyOnePastr();
+				break;
+
+			case HQ_PASTR:
+			case RUSH:
+				directStrategyRush();
+				break;
+
+			case MACRO:
+				break;
+
+			default:
+				System.out.println("Uh oh! Unknown strategy!");
+				break;
+		}
+	}
+
+	private void directStrategyRush() throws GameActionException {
+		attackModeTarget = chooseEnemyPastrAttackTarget();
+		if (attackModeTarget == null) { // rally toward center if there are no enemy pastrs
+			attackModeTarget = new MapLocation(rc.getMapWidth() / 2, rc.getMapHeight() / 2);
+			while (rc.senseTerrainTile(attackModeTarget) == TerrainTile.VOID) {
+				attackModeTarget = attackModeTarget.add(attackModeTarget.directionTo(ourHQ));
+			}
+		}
+		MessageBoard.ATTACK_LOC.writeMapLocation(attackModeTarget);
+	}
+
+	private void directStrategyOnePastr() throws GameActionException {
+		boolean desperation = false;
+
 		// Decided whether to trigger attack mode
 		if (!attackModeTriggered) {
-			// if the enemy has overextended himself building pastrs, attack!
-			// The threshold to attack should be smaller on a smaller map because
-			// it will take less time to get there, so the opponent will have less time to
-			// mend his weakness.
 			if (numEnemyPastrs >= 2) {
-				int attackThreshold = 1 + (int) (hqSeparation / 40);
+				// if the enemy has overextended himself building pastrs, attack!
+				// The threshold to attack should be smaller on a smaller map because
+				// it will take less time to get there, so the opponent will have less time to
+				// mend his weakness.
+				// double hqSeparation = Math.sqrt(ourHQ.distanceSquaredTo(theirHQ));
+				int attackThreshold = 1;
 				if (numAlliedSoldiers - maxEnemySoldiers >= attackThreshold) {
 					attackModeTriggered = true;
 				}
 			}
-			
+
 			// if the enemy is out-milking us, then we need to attack or we are going to lose
 			if (theirMilk >= 0.4 * GameConstants.WIN_QTY && theirMilk > ourMilk) {
-				attackModeTriggered = true;
+				// If the just have a single pastr next to their HQ, though, attacking them won't do much
+				// good. Better to just hope we out-milk them
+				if (theirPastrs.length > 1 || !theirPastrs[0].isAdjacentTo(theirHQ)) {
+					attackModeTriggered = true;
+					desperation = true;
+				}
 			}
 		}
-		
-		if(attackModeTriggered) {
-			MapLocation targetPastr = Util.closest(theirPastrs, ourHQ);
-			MessageBoard.ATTACK_LOC.writeMapLocation(targetPastr, rc);
-		} 
+
+		if (attackModeTriggered) {
+			attackModeTarget = chooseEnemyPastrAttackTarget();
+			if (attackModeTarget == null && ourPastrs.length > 0 && !desperation) attackModeTarget = theirHQ; // if they have no pastrs, camp their spawn
+			MessageBoard.ATTACK_LOC.writeMapLocation(attackModeTarget);
+		}
 	}
 
-	// TODO: this takes a little too long on
+	private MapLocation findSoldierCenterOfMass() {
+		int x = 0;
+		int y = 0;
+		int N = 0;
+		for (int i = allAllies.length; i-- > 0;) {
+			RobotInfo ally = allAllies[i];
+			if (ally.type == RobotType.SOLDIER) {
+				MapLocation allyLoc = ally.location;
+				x += allyLoc.x;
+				y += allyLoc.y;
+				N++;
+			}
+		}
+		if (N == 0) return null;
+		return new MapLocation(x / N, y / N);
+	}
+
+	private MapLocation chooseEnemyPastrAttackTarget() {
+		MapLocation soldierCenter = findSoldierCenterOfMass();
+
+		if (soldierCenter == null) soldierCenter = ourHQ;
+
+		int bestDifficulty = 999999;
+		MapLocation bestTarget = null;
+		for (int i = theirPastrs.length; i-- > 0;) {
+			MapLocation pastr = theirPastrs[i];
+			int difficulty = pastr.distanceSquaredTo(soldierCenter); // could be as high as 10000
+			int distSqToTheirHQ = pastr.distanceSquaredTo(theirHQ);
+			if (distSqToTheirHQ <= 5) difficulty += 10000 * distSqToTheirHQ; // save pastrs near HQ for last
+			if (difficulty < bestDifficulty) {
+				bestDifficulty = difficulty;
+				bestTarget = pastr;
+			}
+		}
+		return bestTarget;
+	}
+
+	// TODO: this takes a little too long on big maps
 	private void computePastrScores() {
 		int mapWidth = rc.getMapWidth();
 		int mapHeight = rc.getMapHeight();
+		double mapSize = Math.hypot(mapWidth, mapHeight);
+		MapLocation mapCenter = new MapLocation(mapWidth / 2, mapHeight / 2);
 
 		double[][] pastrScores = new double[mapWidth][mapHeight];
-		for (int x = 2; x < mapWidth - 2; x += 5) {
-			for (int y = 2; y < mapHeight - 2; y += 5) {
+		for (int y = 2; y < mapHeight - 2; y += 5) {
+			for (int x = 2; x < mapWidth - 2; x += 5) {
 				if (rc.senseTerrainTile(new MapLocation(x, y)) != TerrainTile.VOID) {
 					MapLocation loc = new MapLocation(x, y);
-					double distDiff = Math.sqrt(loc.distanceSquaredTo(theirHQ)) - Math.sqrt(loc.distanceSquaredTo(ourHQ));
-					if (distDiff > 10) {
-						pastrScores[x][y] = distDiff * 0.5;
+					double distOurHQ = Math.sqrt(loc.distanceSquaredTo(ourHQ));
+					double distTheirHQ = Math.sqrt(loc.distanceSquaredTo(theirHQ));
+					if (distOurHQ < distTheirHQ) {
+						int numCows = 0;
 						for (int cowX = x - 2; cowX <= x + 2; cowX++) {
 							for (int cowY = y - 2; cowY <= y + 2; cowY++) {
 								if (rc.senseTerrainTile(new MapLocation(cowX, cowY)) != TerrainTile.VOID) {
-									pastrScores[x][y] += cowGrowth[cowX][cowY];
+									numCows += cowGrowth[cowX][cowY];
 								}
 							}
 						}
+						if (numCows >= 5) {
+							double distCenter = Math.sqrt(loc.distanceSquaredTo(mapCenter));
+							pastrScores[x][y] = numCows * (1 + (1.0 * distCenter - 0.5 * distOurHQ + 0.5 * distTheirHQ) / mapSize);
+						} else {
+							pastrScores[x][y] = -999999; // must be at least some cows
+						}
 					} else {
-						pastrScores[x][y] -= 999999; // only make pastrs on squares closer to our HQ than theirs
+						pastrScores[x][y] = -999999; // only make pastrs on squares closer to our HQ than theirs
 					}
 				} else {
-					pastrScores[x][y] -= 999999; // don't make pastrs on void squares
+					pastrScores[x][y] = -999999; // don't make pastrs on void squares
 				}
 			}
 		}
@@ -177,12 +379,35 @@ public class BotHQ extends Bot {
 	}
 
 	private boolean attackEnemies() throws GameActionException {
-		Robot[] enemies = rc.senseNearbyGameObjects(Robot.class, RobotType.HQ.attackRadiusMaxSquared, them);
+		Robot[] enemies = rc.senseNearbyGameObjects(Robot.class, here, 25, them);
 		if (enemies.length == 0) return false;
 
-		RobotInfo info = rc.senseRobotInfo(enemies[0]);
-		MapLocation target = info.location;
-		rc.attackSquare(target);
+		double bestTotalDamage = 0;
+		MapLocation bestTarget = null;
+		for (int i = enemies.length; i-- > 0;) {
+			RobotInfo info = rc.senseRobotInfo(enemies[i]);
+			MapLocation enemyLoc = info.location;
+			if (!Util.inHQAttackRange(enemyLoc, here)) continue;
+
+			int distSq = here.distanceSquaredTo(enemyLoc);
+			MapLocation target = enemyLoc;
+			double directDamage = RobotType.HQ.attackPower - RobotType.HQ.splashPower;
+			if (distSq > RobotType.HQ.attackRadiusMaxSquared) {
+				target = target.add(target.directionTo(here));
+				directDamage = 0;
+			}
+
+			int enemiesSplashed = rc.senseNearbyGameObjects(Robot.class, target, 2, them).length;
+			int alliesSplashed = rc.senseNearbyGameObjects(Robot.class, target, 2, us).length;
+			double netSplashDamage = RobotType.HQ.splashPower * (enemiesSplashed - alliesSplashed);
+			double totalDamage = directDamage + netSplashDamage;
+			if (totalDamage > bestTotalDamage) {
+				bestTotalDamage = totalDamage;
+				bestTarget = target;
+			}
+		}
+
+		if (bestTarget != null) rc.attackSquare(bestTarget);
 		return true;
 	}
 
@@ -190,12 +415,29 @@ public class BotHQ extends Bot {
 		if (rc.senseRobotCount() >= GameConstants.MAX_ROBOTS) return false;
 		// if (rc.senseRobotCount() >= 2) return false;
 
-		Direction dir = Util.opposite(ourHQ.directionTo(theirHQ)).rotateLeft();
+		int spawnCount = MessageBoard.SPAWN_COUNT.readInt();
+
+		Direction dir = here.directionTo(theirHQ);
 		for (int i = 8; i-- > 0;) {
 			if (rc.canMove(dir)) {
-				rc.spawn(dir);
-				return true;
-			} else {
+				// Don't put base noise tower or pastr on diagonals, or we might hit them with splash when we kill soldiers that try to attack them.
+				if (!(spawnCount <= 1 && dir.isDiagonal())) {
+					rc.spawn(dir);
+					MessageBoard.SPAWN_COUNT.writeInt(spawnCount + 1);
+					return true;
+				}
+			}
+			dir = dir.rotateRight();
+		}
+
+		// Try diagonals if necessary
+		if (spawnCount <= 1) {
+			for (int i = 8; i-- > 0;) {
+				if (rc.canMove(dir)) {
+					rc.spawn(dir);
+					MessageBoard.SPAWN_COUNT.writeInt(spawnCount + 1);
+					return true;
+				}
 				dir = dir.rotateRight();
 			}
 		}
