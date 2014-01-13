@@ -1,3 +1,30 @@
+team052 - The Vegan Police
+   1/12: dangerous: beat my hq pastr strat with a better hq pastr implementation.
+         on bakedpotato his herding was better. on divide got better map control
+         since my guys always retreat, and built a second pastr
+
+team133 - Proxy 2 Gate
+   1/12: dangerous: rushes the my pastr. camps spawn if pastr is in HQ. this starves the HQ
+                    pastr of cows. builds a pastr + noise tower in the center at round 1000,
+                    which wins if they have map control or loses if some of my guys got out.
+                    beat me bad on reticle this way.
+   they now have a possibly-dangerous rush?
+   INTERESTING STAND-OFFISH MICRO: WATCH MATCH 292; MIGHT BE SLIGHTLY BETTER THAN MINE
+   with framework-1-9: (match 292) G#1: they build 2 pastrs, I built 1,
+                                        all pastrs were destroyed, I rebuilt mine and wo
+                                   G#2: they neglected to build pastrs, so I won with 1.
+
+team059 - cereBELLUM
+   1/12: Uses HQ noise tower but tries to build others randomly in the open. Doesn't
+         work well because I quickly kill those. My harrassers were effective
+
+
+team178 - @Deprecated
+   1/12: Used HQ noise tower. My harrassers were effective so my HQ noise tower won.
+
+team037 - Southern
+   1/12: builds a noise tower + pastr (noise tower first) outside HQ but doesn't defend them, so I killed them
+
 team069 - 1260/3
    Does a HQ noise tower + pastr strategy, with fairly dumb but sometimes effective
    noise tower herding.
@@ -20,14 +47,9 @@ team056 - baumteam
 team225 - The Simple Soldier
    with framework-1-9: they built too many pastrs, and I punished them and won
 
-team133 - Proxy 2 Gate
-   they now have a possibly-dangerous rush?
-   INTERESTING STAND-OFFISH MICRO: WATCH MATCH 292; MIGHT BE SLIGHTLY BETTER THAN MINE
-   with framework-1-9: (match 292) G#1: they build 2 pastrs, I built 1,
-                                        all pastrs were destroyed, I rebuilt mine and wo
-                                   G#2: they neglected to build pastrs, so I won with 1.
 
 team009 - Noob Status
+   1/12: now uses hq pastr with pretty bad noise tower herding. my harrassers were effective
    REALLY NICE BUG + ROAD HEURISTIC PATHFINDING. MAKES IT OBVIOUS THAT THE BFS IS SLOWING ME DOWN A LOT
    NICE SOLDIER HERDING INTO CORNERS STRATEGY
    with framework-1-9: (match 305) G#1: they built 2 pastrs in corners and used soldiers to herd into them
@@ -35,9 +57,6 @@ team009 - Noob Status
                                    G#2: he got confused b/c Reticle doesn't have corners, and I won
                                    G#3: another open map; they herded into corners and won
 
-team052 - The Vegan Police
-   LESSON: WHEN I COMPLETELY ANNIHILATE THE ENEMY, DON'T LET HIM REBUILD
-   with framework-1-9: he has decent straight-line soldier herding. but I caught his herders one by one and annihilated them when I attacked
 
 team038 - FireAnts
    NICE CIRCULAR HERDING STRATEGY (EACH SOLDIER HERDS 180 DEGREES AS IT ARRIVES), BUT WEAK TO ATTACKS

@@ -21,13 +21,13 @@ public class Bfs {
 	static void initQueue(MapLocation dest) {
 		locQueueHead = 0;
 		locQueueTail = 0;
-
+		
 		wasQueued = new boolean[GameConstants.MAP_MAX_WIDTH][GameConstants.MAP_MAX_HEIGHT];
 
 		// Push dest onto queue
 		locQueue[locQueueTail] = dest;
 		locQueueTail++;
-		wasQueued[dest.x][dest.y] = true;
+		wasQueued[dest.x][dest.y] = true;		
 	}
 
 	// HQ calls this function to spend spare bytecodes computing paths for soldiers
@@ -49,18 +49,18 @@ public class Bfs {
 
 			int locX = loc.x;
 			int locY = loc.y;
-			for (int i = 8; i-- > 0;) {
-				int x = locX + dirsX[i];
-				int y = locY + dirsY[i];
-				if (x > 0 && y > 0 && x < mapWidth && y < mapHeight && !wasQueued[x][y]) {
-					MapLocation newLoc = new MapLocation(x, y);
-					if (rc.senseTerrainTile(newLoc) != TerrainTile.VOID && (destInSpawn || !Util.inHQAttackRange(newLoc, enemyHQ))) {
-						publishResult(newLoc, dest, dirs[i], rc);
+			for (int i = 8; i-- > 0;) { //3 + 8*3 = 27
+				int x = locX + dirsX[i]; //6
+				int y = locY + dirsY[i]; //6
+				if (x > 0 && y > 0 && x < mapWidth && y < mapHeight && !wasQueued[x][y]) { //max 16
+					MapLocation newLoc = new MapLocation(x, y); //6
+					if (rc.senseTerrainTile(newLoc) != TerrainTile.VOID /* 5 + 10 */ && (destInSpawn || !Util.inHQAttackRange(newLoc, enemyHQ)/*usually 22*/)) {
+						publishResult(newLoc, dest, dirs[i], rc); // 7 + publishResult
 
 						// push newLoc onto queue
-						locQueue[locQueueTail] = newLoc;
-						locQueueTail++;
-						wasQueued[x][y] = true;
+						locQueue[locQueueTail] = newLoc; //4
+						locQueueTail++; //4
+						wasQueued[x][y] = true; //6
 					}
 				}
 			}

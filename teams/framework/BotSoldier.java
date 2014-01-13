@@ -24,6 +24,9 @@ public class BotSoldier extends Bot {
 	int spawnOrder;
 
 	public void turn() throws GameActionException {
+		Strategy.active = MessageBoard.STRATEGY.readStrategy();
+		if (Strategy.active == Strategy.UNDECIDED) return;
+
 		if (rc.getConstructingRounds() > 0) return; // can't do anything while constructing
 
 		if (Strategy.active == Strategy.HQ_PASTR) {
@@ -147,17 +150,18 @@ public class BotSoldier extends Bot {
 	// else is building or has built a noise tower, build one.
 	private boolean tryBuildNoiseTower() throws GameActionException {
 		if (!rc.isActive()) return false;
-		if (Clock.getRoundNum() < 200) return false;
-		if (rc.senseRobotCount() < 6) return false;
 
 		// A problem with building a noise tower is that it makes us more vulnerable to
 		// a rush. If it's early and the opponent hasn't build a pastr, let's hold off
 		// in case it means that they are rushing.
-		if (Clock.getRoundNum() < 300 && rc.sensePastrLocations(them).length == 0) return false;
+		if (Strategy.active != Strategy.NOISE_THEN_ONE_PASTR) {
+			if (Clock.getRoundNum() < 300 && rc.sensePastrLocations(them).length == 0) return false;
+		}
 
 		// Only allowed to build noise tower if adjacent to pastr
-		MapLocation[] ourPastrs = rc.sensePastrLocations(us);
-		if (ourPastrs.length == 0 || !here.isAdjacentTo(ourPastrs[0])) return false;
+		MapLocation pastrLoc = MessageBoard.BEST_PASTR_LOC.readMapLocation();
+		if (pastrLoc == null) return false;
+		if (!here.isAdjacentTo(pastrLoc)) return false;
 
 		// Check if someone else is already building a noise tower
 		MapLocation existingBuilder = MessageBoard.BUILDING_NOISE_TOWER.readMapLocation();
@@ -169,7 +173,7 @@ public class BotSoldier extends Bot {
 
 		// Construct the noise tower and advertise the fact that we are doing it
 		MessageBoard.BUILDING_NOISE_TOWER.writeMapLocation(here);
-		constructNoiseTower(ourPastrs[0]);
+		constructNoiseTower(pastrLoc);
 		return true;
 	}
 
@@ -392,7 +396,12 @@ public class BotSoldier extends Bot {
 	private void harrassToward(MapLocation enemySoldier) throws GameActionException {
 		Direction toEnemy = here.directionTo(enemySoldier);
 
-		if (FastRandom.randInt(4) == 0 && numOtherAlliedSoldiersInRange(here.add(toEnemy, 2), 1) == 0) {
+		boolean closerToTheirHQ = here.distanceSquaredTo(theirHQ) < here.distanceSquaredTo(ourHQ);
+		if (closerToTheirHQ) {
+			if (tryToKillCows()) return;
+		}
+
+		if (closerToTheirHQ && FastRandom.randInt(4) == 0 && numOtherAlliedSoldiersInRange(here.add(toEnemy, 2), 1) == 0) {
 			rc.attackSquare(here.add(toEnemy, 2));
 			return;
 		}
@@ -423,8 +432,33 @@ public class BotSoldier extends Bot {
 			rc.move(tryDir);
 			return;
 		}
-		rc.attackSquare(here.add(toEnemy, 2));
+		if (closerToTheirHQ) rc.attackSquare(here.add(toEnemy, 2));
 		Debug.indicate("micro", 1, "can't safely approach enemy soldier");
+	}
+
+	int[] shootX = new int[] { -1, 0, 1, -2, -1, 0, 1, 2, -2, -1, 1, 2, -2, -1, 0, 1, 2, -1, 0, 1 };
+	int[] shootY = new int[] { 2, 2, 2, 1, 1, 1, 1, 1, 0, 0, 0, 0, -1, -1, -1, -1, -1, -2, -2, -2 };
+
+	private boolean tryToKillCows() throws GameActionException {
+		MapLocation bestTarget = null;
+		double mostCows = -1;
+		for (int i = shootX.length; i-- > 0;) {
+			MapLocation target = here.add(shootX[i], shootY[i]);
+			double cows = rc.senseCowsAtLocation(target);
+			if (cows > mostCows) {
+				if (numOtherAlliedSoldiersInRange(target, 1) == 0) {
+					mostCows = cows;
+					bestTarget = target;
+				}
+			}
+		}
+		Debug.indicate("micro", 2, "trying to kill cows: mostCows = " + mostCows + " at " + (bestTarget == null ? "null" : bestTarget.toString()));
+		if (mostCows > 300) {
+			rc.attackSquare(bestTarget);
+			return true;
+		} else {
+			return false;
+		}
 	}
 
 	private int numOtherAlliedSoldiersInAttackRange(MapLocation loc) throws GameActionException {
@@ -538,7 +572,7 @@ public class BotSoldier extends Bot {
 		// a losing 1v1 into a winning one!
 		boolean fireOneLastShot = true;
 		for (int i = attackableEnemies.length; i-- > 0;) {
-			fireOneLastShot &= attackableEnemies[i].actionDelay >= 3;
+			fireOneLastShot &= attackableEnemies[i].actionDelay >= 3 || attackableEnemies[i].constructingRounds > 0;
 			if (!fireOneLastShot) break;
 		}
 

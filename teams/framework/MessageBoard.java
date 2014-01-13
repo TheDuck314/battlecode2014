@@ -7,7 +7,8 @@ public enum MessageBoard {
 	ATTACK_LOC(GameConstants.BROADCAST_MAX_CHANNELS - 2),
 	BUILDING_NOISE_TOWER(GameConstants.BROADCAST_MAX_CHANNELS - 3),
 	ROUND_KILL_COUNT(GameConstants.BROADCAST_MAX_CHANNELS - 4),
-	SPAWN_COUNT(GameConstants.BROADCAST_MAX_CHANNELS - 5);
+	SPAWN_COUNT(GameConstants.BROADCAST_MAX_CHANNELS - 5),
+	STRATEGY(GameConstants.BROADCAST_MAX_CHANNELS - 6);
 
 	public static void setDefaultChannelValues() throws GameActionException {
 		BEST_PASTR_LOC.writeMapLocation(null);
@@ -15,6 +16,7 @@ public enum MessageBoard {
 		BUILDING_NOISE_TOWER.writeMapLocation(null);
 		ROUND_KILL_COUNT.writeInt(0);
 		SPAWN_COUNT.writeInt(0);
+		STRATEGY.writeStrategy(Strategy.UNDECIDED);
 	}
 	
 	private static RobotController rc;
@@ -50,5 +52,13 @@ public enum MessageBoard {
 		int data = readInt();
 		if(data == -999) return null;
 		else return new MapLocation(data / GameConstants.MAP_MAX_WIDTH, data % GameConstants.MAP_MAX_WIDTH);
+	}
+	
+	public void writeStrategy(Strategy s) throws GameActionException {
+		writeInt(s.ordinal());
+	}
+	
+	public Strategy readStrategy() throws GameActionException {
+		return Strategy.values()[readInt()];
 	}
 }

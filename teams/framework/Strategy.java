@@ -5,7 +5,8 @@ public enum Strategy {
 	NOISE_THEN_ONE_PASTR, // Build a noise tower somewhere nice, then a pastr, then defend them
 	HQ_PASTR, // Build a noise tower then pastr in HQ and harass with soldiers
 	RUSH, // Rally to the middle of the map and rush pastrs as they appear
-	MACRO; // Build several pastrs in nice places (with noise towers??)
+	MACRO, // Build several pastrs in nice places (with noise towers??)
+	UNDECIDED;
 
-	public static Strategy active = HQ_PASTR;
+	public static Strategy active = UNDECIDED;
 }

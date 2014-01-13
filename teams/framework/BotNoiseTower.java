@@ -9,6 +9,7 @@ public class BotNoiseTower extends Bot {
 	}
 
 	MapLocation pastr = null;
+	boolean finishedDumbHerding = false;
 
 	public void turn() throws GameActionException {
 		if (!rc.isActive()) return;
@@ -24,8 +25,8 @@ public class BotNoiseTower extends Bot {
 			// }
 		}
 
-		herdTowardPastrSmart();
-		// herdTowardPastrDumb();
+		if (!finishedDumbHerding) herdTowardPastrDumb();
+		if (finishedDumbHerding) herdTowardPastrSmart();
 	}
 
 	private MapLocation findNearestAlliedPastr() {
@@ -48,7 +49,10 @@ public class BotNoiseTower extends Bot {
 			target = new MapLocation(pastr.x + dx, pastr.y + dy);
 			attackDir = attackDir.rotateRight();
 			if (attackDir == Direction.NORTH) radius--;
-			if (radius <= 5) radius = 20;
+			if (radius <= 5) {
+				finishedDumbHerding = true;
+				return;
+			}
 		} while (tooFarOffMap(target) || !rc.canAttackSquare(target));
 
 		rc.attackSquare(target);
