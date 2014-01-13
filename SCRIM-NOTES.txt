@@ -11,6 +11,7 @@ team225 - The Simple Soldier
    
 team133 - Proxy 2 Gate
    INTERESTING STAND-OFFISH MICRO: WATCH MATCH 292; MIGHT BE SLIGHTLY BETTER THAN MINE
+   Their micro actually sucked as of 1/9. But the stand-offishness is a good idea.
    with framework-1-9: (match 292) G#1: they build 2 pastrs, I built 1,
                                         all pastrs were destroyed, I rebuilt mine and wo
                                    G#2: they neglected to build pastrs, so I won with 1.
@@ -32,3 +33,9 @@ team038 - FireAnts
 
 team027 - Armada
    DIDN'T BUILD PASTRS, ONLY ATTACKED MINE (ONE AT A TIME...)
+   
+team178 - @Deprecated
+   REALLY NICE ATTACK MICRO THAT ANNIHILATED ME WITH A RUSH
+   How their micro seems to work: they hold off until they have a numbers advantage. They signal
+   to each other so that bots that can't see the fight will join it. They don't walk into double-teams.
+   They completely wipe the floor with me with equal numbers.
