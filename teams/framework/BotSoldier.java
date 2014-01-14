@@ -5,7 +5,7 @@ import battlecode.common.*;
 public class BotSoldier extends Bot {
 	public BotSoldier(RobotController theRC) throws GameActionException {
 		super(theRC);
-		Debug.init(theRC, "micro");
+		Debug.init(theRC, "finesse");
 		Nav.init(theRC);
 
 		spawnOrder = MessageBoard.SPAWN_COUNT.readInt();
@@ -25,21 +25,13 @@ public class BotSoldier extends Bot {
 
 	public void turn() throws GameActionException {
 		if (!rc.isActive()) return;
-		if (rc.getConstructingRounds() > 0) return; // can't do anything while constructing
+		if (rc.getConstructingRounds() > 0) return; // can't do anything while constructing; is this redundant?
 
 		Strategy.active = MessageBoard.STRATEGY.readStrategy();
 		if (Strategy.active == Strategy.UNDECIDED) return;
 
 		if (Strategy.active == Strategy.HQ_PASTR) {
-			if (spawnOrder == 1) {
-				MapLocation pastrLoc = ourHQ.add(ourHQ.directionTo(here).rotateRight().rotateRight());
-				constructNoiseTower(pastrLoc);
-				return;
-			}
-			if (spawnOrder == 2) {
-				rc.construct(RobotType.PASTR);
-				return;
-			}
+			if (doHQPastrStratBuilding()) return;
 		}
 
 		updateEnemyData();
@@ -55,18 +47,19 @@ public class BotSoldier extends Bot {
 
 		// If we are in attack mode, move toward the attack target and engage.
 		if (attackTarget != null) {
-			if (rc.isActive() && attackTarget.distanceSquaredTo(theirHQ) <= 5 && here.distanceSquaredTo(theirHQ) <= 35) {
+			if (attackTarget.distanceSquaredTo(theirHQ) <= 5 && here.distanceSquaredTo(theirHQ) <= 35) {
 				harrassTheirHQ();
 				return;
 			} else {
 				Nav.goTo(attackTarget, Nav.Sneak.NO, navEngage);
+				// If we didn't move in Nav, try fighting:
 				if (rc.isActive() && visibleEnemies.length > 0) fight();
 				return;
 			}
 		}
 
 		// See if we should build something
-		maybeBuildSomething();
+		if (tryBuildNoiseTower()) return;
 
 		// Build or defend a pastr
 		buildOrDefendPastr();
@@ -94,18 +87,42 @@ public class BotSoldier extends Bot {
 		}
 	}
 
-	private void maybeBuildSomething() throws GameActionException {
-		switch (Strategy.active) {
-			case NOISE_THEN_ONE_PASTR:
-				if (spawnOrder == 1 && tryBuildNoiseTowerFast()) return;
-				break;
-
-			case ONE_PASTR_THEN_NOISE:
-				if (tryBuildNoiseTower()) return;
-				break;
-
+	private boolean doHQPastrStratBuilding() throws GameActionException {
+		if (spawnOrder == 1) {
+			MapLocation pastrLoc = ourHQ.add(ourHQ.directionTo(here).rotateRight().rotateRight());
+			constructAndAdvertiseNoiseTower(pastrLoc);
+			return true;
 		}
+		if (spawnOrder == 2) {
+			// a trick: make the pastr go up just after the noise tower
+			// which case make the pastr immediately. Keeps the enemy guessing for an extra ~20 rounds and doesn't
+			// sacrifice any cows
+			if (Clock.getRoundNum() < 80) return true;
+			else rc.construct(RobotType.PASTR);
+			return true;
+		}
+		// Check if the initial pastr or noise tower got destroyed. If so, rebuild it if we are adjacent to the HQ
+		if (Clock.getRoundNum() > 200 && here.isAdjacentTo(ourHQ) && !here.directionTo(ourHQ).isDiagonal()) {
+			if (rc.sensePastrLocations(us).length == 0) {
+				int otherRebuildRoundStart = MessageBoard.REBUILDING_HQ_PASTR_ROUND_START.readInt();
+				if (Clock.getRoundNum() > 2 + RobotType.PASTR.captureTurns + otherRebuildRoundStart) {
+					MessageBoard.REBUILDING_HQ_PASTR_ROUND_START.writeInt(Clock.getRoundNum());
+					rc.construct(RobotType.PASTR);
+					return true;
+				}
+			}
+			MapLocation noiseTowerLoc = MessageBoard.NOISE_TOWER_BUILD_LOCATION.readMapLocation();
+			if(rc.senseNearbyGameObjects(Robot.class, noiseTowerLoc, 0, us).length == 0) {
+				MapLocation[] ourPastrs = rc.sensePastrLocations(us);
+				MapLocation pastrLoc = ourPastrs.length > 0 ? ourPastrs[0] : ourHQ;
+				constructAndAdvertiseNoiseTower(pastrLoc);
+				return true;
+			}
+		}
+		return false;
 	}
+
+	int pastrDelayFinesseWaitRoundsRemaining = 32;
 
 	private void buildOrDefendPastr() throws GameActionException {
 		MapLocation desiredPastrLoc = MessageBoard.BEST_PASTR_LOC.readMapLocation();
@@ -113,6 +130,29 @@ public class BotSoldier extends Bot {
 			if (here.equals(desiredPastrLoc)) {
 				// We get to build the pastr!
 				if (rc.isActive()) {
+					// a trick: make the pastr go up just after the noise tower, if we're already building a noise tower
+					// which case make the pastr immediately. Keeps the enemy guessing for an extra ~20 rounds and doesn't
+					// sacrifice any cows
+					// First, make sure the noise tower builder is still alive:
+					MapLocation noiseTowerLoc = MessageBoard.NOISE_TOWER_BUILD_LOCATION.readMapLocation();
+					if (noiseTowerLoc != null) {
+						if (numOtherAlliedSoldiersInRange(noiseTowerLoc, 0) == 1) {
+							// Next, determine when construction started
+							int noiseTowerBuildStartRound = MessageBoard.NOISE_TOWER_BUILD_START_ROUND.readInt();
+							// Start construction 80 rounds after that. Before that, sit tight:
+							if (Clock.getRoundNum() < 80 + noiseTowerBuildStartRound) {
+								return;
+							}
+						}
+					} else {
+						// no one's building a noise tower yet. Wait some time in case someone is about to start
+						// Also, we won't start the noise tower build until at least turn 81 since that is when HQ
+						// tower people set up their pastr, so wait at least until then
+						pastrDelayFinesseWaitRoundsRemaining--;
+						Debug.indicate("finesse", 0, "rounds remaining = " + pastrDelayFinesseWaitRoundsRemaining);
+						if (Clock.getRoundNum() <= 85 || pastrDelayFinesseWaitRoundsRemaining > 0) return;
+					}
+					// Either we've given up on the trick or the trick delay is over:
 					rc.construct(RobotType.PASTR);
 					return;
 				}
@@ -132,17 +172,9 @@ public class BotSoldier extends Bot {
 		}
 	}
 
-	private boolean tryBuildNoiseTowerFast() throws GameActionException {
-		if (!rc.isActive()) return false;
-		MapLocation pastrLoc = MessageBoard.BEST_PASTR_LOC.readMapLocation();
-		if (pastrLoc == null) return false;
-		if (!here.isAdjacentTo(pastrLoc)) return false;
-
-		constructNoiseTower(pastrLoc);
-		return true;
-	}
-
-	private void constructNoiseTower(MapLocation pastrLoc) throws GameActionException {
+	private void constructAndAdvertiseNoiseTower(MapLocation pastrLoc) throws GameActionException {
+		MessageBoard.NOISE_TOWER_BUILD_LOCATION.writeMapLocation(here);
+		MessageBoard.NOISE_TOWER_BUILD_START_ROUND.writeInt(Clock.getRoundNum());
 		rc.construct(RobotType.NOISETOWER);
 		HerdPattern.computeAndPublish(here, pastrLoc, HerdPattern.Band.ONE, rc);
 	}
@@ -152,11 +184,25 @@ public class BotSoldier extends Bot {
 	private boolean tryBuildNoiseTower() throws GameActionException {
 		if (!rc.isActive()) return false;
 
-		// A problem with building a noise tower is that it makes us more vulnerable to
-		// a rush. If it's early and the opponent hasn't build a pastr, let's hold off
-		// in case it means that they are rushing.
-		if (Strategy.active != Strategy.NOISE_THEN_ONE_PASTR) {
-			if (Clock.getRoundNum() < 300 && rc.sensePastrLocations(them).length == 0) return false;
+		if (Strategy.active == Strategy.HQ_PASTR) {
+			// in this strategy, we should build a noise tower if the previous one was destroyed
+			// and we are next to the HQ
+			if (here.isAdjacentTo(ourHQ)) {
+				// Check where the original noise tower was
+				MapLocation existingBuilder = MessageBoard.NOISE_TOWER_BUILD_LOCATION.readMapLocation();
+				if (existingBuilder != null) {
+					// If the existing builder is still around, don't build a noise tower
+					if (!here.equals(existingBuilder) && rc.senseNearbyGameObjects(Robot.class, existingBuilder, 0, us).length > 0) {
+						return false;
+					}
+				}
+				// Find where our pastr is
+				MapLocation[] ourPastrs = rc.sensePastrLocations(us);
+				MapLocation pastrLoc = ourPastrs.length > 0 ? ourPastrs[0] : ourHQ;
+				// build the noise tower
+				constructAndAdvertiseNoiseTower(pastrLoc);
+				return true;
+			}
 		}
 
 		// Only allowed to build noise tower if adjacent to pastr
@@ -164,17 +210,39 @@ public class BotSoldier extends Bot {
 		if (pastrLoc == null) return false;
 		if (!here.isAdjacentTo(pastrLoc)) return false;
 
+		switch (Strategy.active) {
+			case ONE_PASTR_THEN_NOISE:
+				// In this strategy, we are cautious and don't build a noise tower until they build a pastr
+				// or until a certain number of rounds have elapsed. This is to try to defend better against
+				// rushes
+				int numEnemyPastrs = rc.sensePastrLocations(them).length;
+				if (Clock.getRoundNum() < 300 && numEnemyPastrs == 0) return false;
+
+				// Usually we don't want to build a noise tower until one of our bots has made it to our pastr
+				// location. However, we can build the noise tower if they have put up a pastr. Said another way,
+				// *don't* build the noise tower if they have no pastrs and no one is at our pastr location
+				if (numEnemyPastrs == 0 && rc.senseNearbyGameObjects(Robot.class, pastrLoc, 0, us).length == 0) return false;
+				break;
+
+			case NOISE_THEN_ONE_PASTR:
+				// no such restriction exists for this strategy
+				break;
+
+			default: // this shouldn't happen
+				break;
+		}
+
 		// Check if someone else is already building a noise tower
-		MapLocation existingBuilder = MessageBoard.BUILDING_NOISE_TOWER.readMapLocation();
+		MapLocation existingBuilder = MessageBoard.NOISE_TOWER_BUILD_LOCATION.readMapLocation();
 		if (existingBuilder != null) {
-			if (rc.senseNearbyGameObjects(Robot.class, existingBuilder, 1, us).length > 0) {
+			// Check if that bot has actually been destroyed
+			if (rc.senseNearbyGameObjects(Robot.class, existingBuilder, 0, us).length > 0) {
 				return false;
 			}
 		}
 
 		// Construct the noise tower and advertise the fact that we are doing it
-		MessageBoard.BUILDING_NOISE_TOWER.writeMapLocation(here);
-		constructNoiseTower(pastrLoc);
+		constructAndAdvertiseNoiseTower(pastrLoc);
 		return true;
 	}
 

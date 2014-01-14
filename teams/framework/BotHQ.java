@@ -69,8 +69,7 @@ public class BotHQ extends Bot {
 		computeBestPastrLocation();
 		MessageBoard.BEST_PASTR_LOC.writeMapLocation(computedBestPastrLocation);
 
-		Strategy.active = analyzeMap();
-		// Strategy.active = Strategy.NOISE_THEN_ONE_PASTR;
+		Strategy.active = pickStrategyByAnalyzingMap();
 		MessageBoard.STRATEGY.writeStrategy(Strategy.active);
 
 		Debug.indicate("map", 2, "going with " + Strategy.active.toString());
@@ -129,7 +128,7 @@ public class BotHQ extends Bot {
 		return slowdownFactor;
 	}
 
-	private Strategy analyzeMap() throws GameActionException {
+	private Strategy pickStrategyByAnalyzingMap() throws GameActionException {
 		// Guess how long it would take the enemy to rush a well-placed pastr
 		MapLocation mapCenter = new MapLocation(rc.getMapWidth() / 2, rc.getMapHeight() / 2);
 		int openPastrRushRounds = guessTravelRounds(theirHQ, mapCenter) + guessTravelRounds(mapCenter, computedBestPastrLocation);
@@ -244,28 +243,44 @@ public class BotHQ extends Bot {
 		MessageBoard.ATTACK_LOC.writeMapLocation(attackModeTarget);
 	}
 
+	private boolean theyHavePastrOutsideHQ() {
+		boolean attackablePastrExists = false;
+		for (int i = theirPastrs.length; i-- > 0;) {
+			if (!theirPastrs[i].isAdjacentTo(theirHQ)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	private void directStrategyOnePastr() throws GameActionException {
 		boolean desperation = false;
 
 		// Decided whether to trigger attack mode
 		if (!attackModeTriggered) {
+			// if the enemy has overextended himself building pastrs, attack!
+			// I think even building two pastrs is an overextension that we can punish.
 			if (numEnemyPastrs >= 2) {
-				// if the enemy has overextended himself building pastrs, attack!
-				// The threshold to attack should be smaller on a smaller map because
-				// it will take less time to get there, so the opponent will have less time to
-				// mend his weakness.
-				// double hqSeparation = Math.sqrt(ourHQ.distanceSquaredTo(theirHQ));
-				int attackThreshold = 1;
-				if (numAlliedSoldiers - maxEnemySoldiers >= attackThreshold) {
-					attackModeTriggered = true;
+				// We should only try to punish them if we have at least as many soldiers as they do
+				// One issue is that we may be overestimating their strength because with some probability
+				// they've built a noise tower, sacrificing a soldier and slowing their spawns more than
+				// we would estimate. So fudge it by 1 soldier:
+				if (numAlliedSoldiers + 1 >= maxEnemySoldiers) {
+					// However, we need to make sure that at least one of these pastrs is outside their
+					// HQ zone. There's no point in trying to punish them for building a bunch of pastrs
+					// around their HQ; it doesn't help them and we can't kill them.
+					if (theyHavePastrOutsideHQ()) {
+						// If all these conditions are met, then punish them!
+						attackModeTriggered = true;
+					}
 				}
 			}
 
 			// if the enemy is out-milking us, then we need to attack or we are going to lose
 			if (theirMilk >= 0.4 * GameConstants.WIN_QTY && theirMilk > ourMilk) {
-				// If the just have a single pastr next to their HQ, though, attacking them won't do much
+				// If they just have a single pastr next to their HQ, though, attacking them won't do much
 				// good. Better to just hope we out-milk them
-				if (theirPastrs.length > 1 || !theirPastrs[0].isAdjacentTo(theirHQ)) {
+				if (theyHavePastrOutsideHQ()) {
 					attackModeTriggered = true;
 					desperation = true;
 				}
@@ -274,7 +289,17 @@ public class BotHQ extends Bot {
 
 		if (attackModeTriggered) {
 			attackModeTarget = chooseEnemyPastrAttackTarget();
-			if (attackModeTarget == null && ourPastrs.length > 0 && !desperation) attackModeTarget = theirHQ; // if they have no pastrs, camp their spawn
+			// if there's no pastr to attack, decide whether to camp their spawn or to defend/rebuid our pastr:
+			if (attackModeTarget == null) {
+				// first, if our pastr has been destroyed we need to rebuild it instead of attacking.
+				if (ourPastrs.length > 0) {
+					// but if it's up, consider camping their spawn. Camping their spawn is only a good idea
+					// if we are ahead on milk. Otherwise we should defend our pastr
+					if (!desperation) {
+						attackModeTarget = theirHQ;
+					}
+				}
+			}
 			MessageBoard.ATTACK_LOC.writeMapLocation(attackModeTarget);
 		}
 	}
@@ -417,31 +442,19 @@ public class BotHQ extends Bot {
 
 		int spawnCount = MessageBoard.SPAWN_COUNT.readInt();
 
-		Direction dir = here.directionTo(theirHQ);
-		for (int i = 8; i-- > 0;) {
+		Direction startDir = here.directionTo(theirHQ);
+		if (startDir.isDiagonal()) startDir = startDir.rotateRight();
+
+		int[] offsets = new int[] { 0, 2, 4, 6, 1, 3, 5, 7 };
+		for (int i = 0; i < offsets.length; i++) {
+			Direction dir = Direction.values()[(startDir.ordinal() + offsets[i]) % 8];
 			if (rc.canMove(dir)) {
-				// Don't put base noise tower or pastr on diagonals, or we might hit them with splash when we kill soldiers that try to attack them.
-				if (!(spawnCount <= 1 && dir.isDiagonal())) {
-					rc.spawn(dir);
-					MessageBoard.SPAWN_COUNT.writeInt(spawnCount + 1);
-					return true;
-				}
-			}
-			dir = dir.rotateRight();
-		}
-
-		// Try diagonals if necessary
-		if (spawnCount <= 1) {
-			for (int i = 8; i-- > 0;) {
-				if (rc.canMove(dir)) {
-					rc.spawn(dir);
-					MessageBoard.SPAWN_COUNT.writeInt(spawnCount + 1);
-					return true;
-				}
-				dir = dir.rotateRight();
+				rc.spawn(dir);
+				MessageBoard.SPAWN_COUNT.writeInt(spawnCount + 1);
+				return true;
 			}
 		}
-
+		
 		return false;
 	}
 }
