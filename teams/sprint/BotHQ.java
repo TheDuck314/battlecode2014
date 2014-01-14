@@ -289,6 +289,12 @@ public class BotHQ extends Bot {
 
 		if (attackModeTriggered) {
 			attackModeTarget = chooseEnemyPastrAttackTarget();
+			
+			//If we don't have a pastr, and we can't kill theirs, don't try to 
+			if(ourPastrs.length == 0 && attackModeTarget != null && attackModeTarget.isAdjacentTo(theirHQ)) {
+				attackModeTarget = null;
+			}
+			
 			// if there's no pastr to attack, decide whether to camp their spawn or to defend/rebuid our pastr:
 			if (attackModeTarget == null) {
 				// first, if our pastr has been destroyed we need to rebuild it instead of attacking.

@@ -17,13 +17,8 @@ public class BotNoiseTower extends Bot {
 		MapLocation nearestPastr = findNearestAlliedPastr();
 		if (nearestPastr != pastr) {
 			pastr = nearestPastr;
-			// if (pastr != null) {
-			// Util.timerStart();
-			// computePastrHerdPattern();
-			// Util.timerEnd("compute herd pattern");
-			// return; // since this will take several turns
-			// }
 		}
+		if(pastr == null) pastr = here;
 
 		if (!finishedDumbHerding) herdTowardPastrDumb();
 		if (finishedDumbHerding) herdTowardPastrSmart();
@@ -40,15 +35,6 @@ public class BotNoiseTower extends Bot {
 	private void herdTowardPastrDumb() throws GameActionException {
 		MapLocation target = null;
 
-		int pastrX, pastrY;
-		if(pastr != null) {
-			pastrX = pastr.x;
-			pastrY = pastr.y;			
-		} else {
-			pastrX = here.x;
-			pastrY = here.y;
-		}
-		
 		do {
 			int dx = radius * attackDir.dx;
 			int dy = radius * attackDir.dy;
@@ -56,7 +42,7 @@ public class BotNoiseTower extends Bot {
 				dx = (int) (dx / 1.4);
 				dy = (int) (dy / 1.4);
 			}
-			target = new MapLocation(pastrX + dx, pastrY + dy);
+			target = new MapLocation(pastr.x + dx, pastr.y + dy);
 			attackDir = attackDir.rotateRight();
 			if (attackDir == Direction.NORTH) radius--;
 			if (radius <= 5) {
@@ -79,13 +65,16 @@ public class BotNoiseTower extends Bot {
 	int numHerdPoints;
 	// static final int maxHerdPoints = 200;
 	static final int maxHerdPoints = 1000;
+	
+	int smartHerdMaxPoints = 400;
 
 	void herdTowardPastrSmart() throws GameActionException {
 		MapLocation attackTarget;
 		numHerdPoints = HerdPattern.Band.ONE.readNumHerdPoints(rc);
 		do {
 			if (herdTargetIndex <= 0) {
-				herdTargetIndex = Math.min(400, numHerdPoints - 1);
+				herdTargetIndex = Math.min(smartHerdMaxPoints, numHerdPoints - 1);
+				smartHerdMaxPoints += 100;
 			}
 
 			// MapLocation herdTarget = herdPoints[herdTargetIndex];
