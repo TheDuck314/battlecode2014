@@ -60,11 +60,13 @@ public class BotSoldier extends Bot {
 			}
 		}
 
-		// See if we should build something
-		if (tryBuildNoiseTower()) return;
+		if (Strategy.active == Strategy.NOISE_THEN_ONE_PASTR || Strategy.active == Strategy.ONE_PASTR_THEN_NOISE) {
+			// See if we should build something
+			if (tryBuildNoiseTower()) return;
 
-		// Build or defend a pastr
-		buildOrDefendPastr();
+			// Build or defend a pastr
+			buildOrDefendPastr();
+		}
 	}
 
 	// Decide whether to behave aggressively or defensively. Only be aggressive if we are in attack mode
@@ -338,11 +340,11 @@ public class BotSoldier extends Bot {
 							if (anEnemyIsDoubleTeamed) break;
 						}
 						if (anEnemyIsDoubleTeamed) { // Fight!
-						// Debug.indicate("micro", 1, "double-teamed, but so is an enemy: fighting");
+							// Debug.indicate("micro", 1, "double-teamed, but so is an enemy: fighting");
 							attackASoldier();
 							return;
 						} else { // no enemy is double-teamed. Retreat!
-						// Debug.indicate("micro", 1, "double-teamed: retreating");
+							// Debug.indicate("micro", 1, "double-teamed: retreating");
 							retreatOrFight();
 							return;
 						}
@@ -665,11 +667,11 @@ public class BotSoldier extends Bot {
 
 		Direction dir = chooseRetreatDirection();
 		if (dir == null) { // Can't retreat! Fight!
-		// Debug.indicate("micro", 2, "couldn't retreat; fighting instead");
+			// Debug.indicate("micro", 2, "couldn't retreat; fighting instead");
 			RobotInfo target = chooseSoldierAttackTarget(attackableEnemies);
 			attackAndRecord(target);
 		} else { // Can retreat. Do it!
-		// Debug.indicate("micro", 2, "retreating successfully");
+			// Debug.indicate("micro", 2, "retreating successfully");
 			rc.move(dir);
 		}
 	}

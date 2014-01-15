@@ -63,7 +63,8 @@ public class BotHQ extends Bot {
 		computeBestPastrLocation();
 		MessageBoard.BEST_PASTR_LOC.writeMapLocation(computedBestPastrLocation);
 
-		Strategy.active = pickStrategyByAnalyzingMap();
+		// Strategy.active = pickStrategyByAnalyzingMap();
+		Strategy.active = Strategy.RUSH;
 		MessageBoard.STRATEGY.writeStrategy(Strategy.active);
 
 		// Debug.indicate("map", 2, "going with " + Strategy.active.toString());
@@ -469,7 +470,7 @@ public class BotHQ extends Bot {
 			Bfs.work(computedBestPastrLocation, rc, Bfs.PRIORITY_LOW, bytecodeLimit);
 		}
 
-		//TODO: consider ordering this in a smarter way
+		// TODO: consider ordering this in a smarter way
 		for (int i = 0; i < theirPastrs.length; i++) {
 			if (Clock.getBytecodeNum() > bytecodeLimit) return;
 			Bfs.work(theirPastrs[i], rc, Bfs.PRIORITY_LOW, bytecodeLimit);

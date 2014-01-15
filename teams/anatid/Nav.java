@@ -28,14 +28,24 @@ public class Nav {
 	private static boolean tryMoveDirect() throws GameActionException {
 		MapLocation here = rc.getLocation();
 		Direction toDest = here.directionTo(dest);
-		Direction[] tryDirs = new Direction[] { toDest, toDest.rotateLeft(), toDest.rotateRight() };
-		for (Direction tryDir : tryDirs) {
-			if (canMoveSafely(tryDir)) {
-				if (engage || !moveEntersFight(tryDir)) {
-					move(tryDir);
-					return true;
+		int bestScore = 0;
+		Direction bestDir = null;
+		Direction[] dirs = new Direction[] { toDest, toDest.rotateLeft(), toDest.rotateRight() };
+		for (Direction dir : dirs) {
+			if (canMoveSafely(dir)) {
+				if (engage || !moveEntersFight(dir)) {
+					boolean road = rc.senseTerrainTile(here.add(dir)) == TerrainTile.ROAD;
+					int score = road ? 2 : 1;
+					if (score > bestScore) {
+						bestScore = score;
+						bestDir = dir;
+					}
 				}
 			}
+		}
+		if (bestDir != null) {
+			move(bestDir);
+			return true;
 		}
 		return false;
 	}
@@ -133,57 +143,47 @@ public class Nav {
 		}
 	}
 
-	// Set up the queue
-	static MapLocation[] bfsQueue = new MapLocation[GameConstants.MAP_MAX_WIDTH * GameConstants.MAP_MAX_HEIGHT];
-	static int bfsQueueHead = 0;
-	static int bfsQueueTail = 0;
-	static Direction[][] bfsPlan = new Direction[GameConstants.MAP_MAX_WIDTH][GameConstants.MAP_MAX_HEIGHT];
-	static boolean[][] bfsWasQueued = new boolean[GameConstants.MAP_MAX_WIDTH][GameConstants.MAP_MAX_HEIGHT];
+	private static boolean tryMoveBfs(MapLocation here) throws GameActionException {
+		Direction bfsDir = Bfs.readResult(here, dest, rc);
 
-	// Reset the BFS plan and initialize the BFS algorithm
-	static void bfsInit() {
-		bfsQueueHead = 0;
-		bfsQueueTail = 0;
+		if (bfsDir == null) return false;
 
-		bfsPlan = new Direction[GameConstants.MAP_MAX_WIDTH][GameConstants.MAP_MAX_HEIGHT];
-		bfsWasQueued = new boolean[GameConstants.MAP_MAX_WIDTH][GameConstants.MAP_MAX_HEIGHT];
+		Direction[] dirs = new Direction[] { bfsDir, bfsDir.rotateLeft(), bfsDir.rotateRight() };
+		int bestScore = 0;
+		Direction bestDir = null;
+		for (int i = 0; i < dirs.length; i++) {
+			Direction dir = dirs[i];
+			if (canMoveSafely(dir)) {
+				if (engage || !moveEntersFight(dir)) {
+					int score = (i == 0 ? 2 : 1);
 
-		// Push dest onto queue
-		bfsQueue[bfsQueueTail] = dest;
-		bfsQueueTail++;
-		bfsWasQueued[dest.x][dest.y] = true;
-	}
+					// Give a big score for ending on a road, but only if the BFS doesn't tell us to backtrack
+					// after deviating to get on a road:
+					MapLocation next = here.add(dir);
+					if (rc.senseTerrainTile(next) == TerrainTile.ROAD) {
+						Direction nextBfsDir = Bfs.readResult(next, dest, rc);
+						if (nextBfsDir != null) {
+							MapLocation nextNext = next.add(nextBfsDir);
+							if (!nextNext.isAdjacentTo(here)) {
+								score += 10;
+							}
+						}
+					}
 
-	static void bfsBuildPlan() throws GameActionException {
-		int mapWidth = rc.getMapWidth();
-		int mapHeight = rc.getMapHeight();
-		Direction[] dirs = new Direction[] { Direction.NORTH_WEST, Direction.SOUTH_WEST, Direction.SOUTH_EAST, Direction.NORTH_EAST, Direction.NORTH,
-				Direction.WEST, Direction.SOUTH, Direction.EAST };
-		int[] dirsX = new int[] { 1, 1, -1, -1, 0, 1, 0, -1 };
-		int[] dirsY = new int[] { 1, -1, -1, 1, 1, 0, -1, 0 };
-
-		while (bfsQueueHead != bfsQueueTail && Clock.getBytecodeNum() < 8500) {
-			// pop a location from the queue
-			MapLocation loc = bfsQueue[bfsQueueHead];
-			bfsQueueHead++;
-
-			int locX = loc.x;
-			int locY = loc.y;
-			for (int i = 8; i-- > 0;) {
-				int x = locX + dirsX[i];
-				int y = locY + dirsY[i];
-				if (x > 0 && y > 0 && x < mapWidth && y < mapHeight && !bfsWasQueued[x][y]) {
-					MapLocation newLoc = new MapLocation(x, y);
-					if (rc.senseTerrainTile(newLoc) != TerrainTile.VOID && !Util.inHQAttackRange(newLoc, enemyHQ)) {
-						bfsPlan[x][y] = dirs[i];
-						// push newLoc onto queue
-						bfsQueue[bfsQueueTail] = newLoc;
-						bfsQueueTail++;
-						bfsWasQueued[x][y] = true;
+					if (score > bestScore) {
+						bestScore = score;
+						bestDir = dir;
 					}
 				}
 			}
 		}
+
+		if (bestDir != null) {
+			move(bestDir);
+			return true;
+
+		}
+		return false;
 	}
 
 	public static void init(RobotController theRC) {
@@ -200,44 +200,29 @@ public class Nav {
 	}
 
 	public static void goTo(MapLocation theDest, Sneak theSneak, Engage theEngage) throws GameActionException {
+		Debug.indicate("nav", 1, "goTo " + theDest.toString());
+
 		sneak = (theSneak == Sneak.YES);
 		engage = (theEngage == Engage.YES);
 
 		if (!theDest.equals(dest)) {
 			dest = theDest;
 			bugState = BugState.DIRECT;
-			// bfsInit(); // reset the BFS plan
 		}
 
 		MapLocation here = rc.getLocation();
 
 		if (here.equals(theDest)) return;
 
-		// if (bfsPlan[here.x][here.y] == null) {
-		// bfsBuildPlan();
-		// }
-
 		if (!rc.isActive()) return;
 
-		// Direction dir = bfsPlan[here.x][here.y];
-		Direction dir = Bfs.readResult(here, dest, rc);
-		if (dir != null && !Util.inHQAttackRange(rc.getLocation().add(dir), enemyHQ)) {
+		if (tryMoveBfs(here)) {
 			Debug.indicate("nav", 0, "using bfs");
-			Direction[] tryDirs = new Direction[] { dir, dir.rotateLeft(), dir.rotateRight() };
-			boolean fight = false;
-			for (int i = 0; i < tryDirs.length; i++) {
-				Direction tryDir = tryDirs[i];
-				if (canMoveSafely(tryDir)) {
-					if (engage || !moveEntersFight(tryDir)) {
-						move(tryDir);
-						return;
-					}
-				}
-			}
-		} else {
-			Debug.indicate("nav", 0, "using bug");
-			bugTo(dest);
+			return;
 		}
+
+		Debug.indicate("nav", 0, "using bug");
+		bugTo(dest);
 	}
 
 	private static void move(Direction dir) throws GameActionException {
