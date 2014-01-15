@@ -5,11 +5,11 @@ import battlecode.common.*;
 public class BotSoldier extends Bot {
 	public BotSoldier(RobotController theRC) throws GameActionException {
 		super(theRC);
-//		Debug.init(theRC, "finesse");
+		// Debug.init(theRC, "finesse");
 		Nav.init(theRC);
 
 		spawnOrder = MessageBoard.SPAWN_COUNT.readInt();
-//		Debug.indicate("buildorder", 0, "I am robot #" + spawnOrder);
+		// Debug.indicate("buildorder", 0, "I am robot #" + spawnOrder);
 	}
 
 	private enum MicroStance {
@@ -38,6 +38,8 @@ public class BotSoldier extends Bot {
 		MapLocation attackTarget = MessageBoard.ATTACK_LOC.readMapLocation();
 		stance = chooseMicroStance(attackTarget);
 		navEngage = stance == MicroStance.AGGRESSIVE ? Nav.Engage.YES : Nav.Engage.NO;
+
+		if (mercyKillPastrs()) return;
 
 		// If there are enemies in attack range, fight!
 		if (attackableEnemies.length > 0 && rc.isActive()) {
@@ -112,7 +114,7 @@ public class BotSoldier extends Bot {
 				}
 			}
 			MapLocation noiseTowerLoc = MessageBoard.NOISE_TOWER_BUILD_LOCATION.readMapLocation();
-			if(rc.senseNearbyGameObjects(Robot.class, noiseTowerLoc, 0, us).length == 0) {
+			if (rc.senseNearbyGameObjects(Robot.class, noiseTowerLoc, 0, us).length == 0) {
 				MapLocation[] ourPastrs = rc.sensePastrLocations(us);
 				MapLocation pastrLoc = ourPastrs.length > 0 ? ourPastrs[0] : ourHQ;
 				constructAndAdvertiseNoiseTower(pastrLoc);
@@ -149,7 +151,7 @@ public class BotSoldier extends Bot {
 						// Also, we won't start the noise tower build until at least turn 81 since that is when HQ
 						// tower people set up their pastr, so wait at least until then
 						pastrDelayFinesseWaitRoundsRemaining--;
-//						Debug.indicate("finesse", 0, "rounds remaining = " + pastrDelayFinesseWaitRoundsRemaining);
+						// Debug.indicate("finesse", 0, "rounds remaining = " + pastrDelayFinesseWaitRoundsRemaining);
 						if (Clock.getRoundNum() <= 85 || pastrDelayFinesseWaitRoundsRemaining > 0) return;
 					}
 					// Either we've given up on the trick or the trick delay is over:
@@ -176,7 +178,7 @@ public class BotSoldier extends Bot {
 		MessageBoard.NOISE_TOWER_BUILD_LOCATION.writeMapLocation(here);
 		MessageBoard.NOISE_TOWER_BUILD_START_ROUND.writeInt(Clock.getRoundNum());
 		rc.construct(RobotType.NOISETOWER);
-		HerdPattern.computeAndPublish(here, pastrLoc, HerdPattern.Band.ONE, rc);
+		HerdPattern.computeAndPublish(here, pastrLoc, rc);
 	}
 
 	// After a little while, if nothing has gone wrong, if we are next to a pastr and no one
@@ -315,7 +317,7 @@ public class BotSoldier extends Bot {
 	// fight() should be called as a result of being forced into combat.
 	// After fight(), don't do anything except return.
 	private void fight() throws GameActionException {
-//		Debug.indicate("micro", 0, String.format("numVisibleEnemies = %d; numAttackableEnemies = %d", visibleEnemies.length, attackableEnemies.length));
+		// Debug.indicate("micro", 0, String.format("numVisibleEnemies = %d; numAttackableEnemies = %d", visibleEnemies.length, attackableEnemies.length));
 
 		if (attackableEnemies.length != 0) { // There is at least one enemy in attack range (which should hopefully not be their HQ)
 			int numAttackableSoldiers = Util.countSoldiers(attackableEnemies);
@@ -336,11 +338,11 @@ public class BotSoldier extends Bot {
 							if (anEnemyIsDoubleTeamed) break;
 						}
 						if (anEnemyIsDoubleTeamed) { // Fight!
-//							Debug.indicate("micro", 1, "double-teamed, but so is an enemy: fighting");
+						// Debug.indicate("micro", 1, "double-teamed, but so is an enemy: fighting");
 							attackASoldier();
 							return;
 						} else { // no enemy is double-teamed. Retreat!
-//							Debug.indicate("micro", 1, "double-teamed: retreating");
+						// Debug.indicate("micro", 1, "double-teamed: retreating");
 							retreatOrFight();
 							return;
 						}
@@ -353,13 +355,13 @@ public class BotSoldier extends Bot {
 						if (stance == MicroStance.AGGRESSIVE || enemySoldier.health <= rc.getHealth() || enemySoldier.constructingRounds > 0
 								|| numOtherAlliedSoldiersInAttackRange(enemySoldier.location) >= 1) {
 							// Kill him!
-//							Debug.indicate("micro", 1, "winning vs single enemy: fighting");
+							// Debug.indicate("micro", 1, "winning vs single enemy: fighting");
 							attackAndRecord(enemySoldier);
 							return;
 						} else {
 							// retreat!
-//							Debug.indicate("micro", 1, "losing vs single enemy: retreating (numOtherAllies in range of " + enemySoldier.location.toString()
-//									+ ") is " + numOtherAlliedSoldiersInAttackRange(enemySoldier.location));
+							// Debug.indicate("micro", 1, "losing vs single enemy: retreating (numOtherAllies in range of " + enemySoldier.location.toString()
+							// + ") is " + numOtherAlliedSoldiersInAttackRange(enemySoldier.location));
 							retreatOrFight();
 							return;
 						}
@@ -382,12 +384,12 @@ public class BotSoldier extends Bot {
 						cautiouslyApproachVisibleEnemySoldier(closestSoldier, maxEnemyExposure);
 						if (!rc.isActive()) return;
 					}
-//					Debug.indicate("micro", 1, "can see a soldier, but preferring to attack a building");
+					// Debug.indicate("micro", 1, "can see a soldier, but preferring to attack a building");
 					attackABuilding();
 					return;
 				} else {
 					// Can't see any soldiers, but can attack a building. Do it
-//					Debug.indicate("micro", 1, "can't see a soldier; attacking a building");
+					// Debug.indicate("micro", 1, "can't see a soldier; attacking a building");
 					attackABuilding();
 					return;
 				}
@@ -431,16 +433,16 @@ public class BotSoldier extends Bot {
 					for (int i = 0; i < offsets.length; i++) {
 						Direction tryDir = Direction.values()[(toBuilding.ordinal() + offsets[i] + 8) % 8];
 						if (rc.canMove(tryDir) && !Util.inHQAttackRange(here.add(tryDir), theirHQ)) {
-//							Debug.indicate("micro", 1, "moving towards visible building");
+							// Debug.indicate("micro", 1, "moving towards visible building");
 							rc.move(tryDir);
 							return;
 						}
 					}
-//					Debug.indicate("micro", 1, "ignoring visible building because somehow we can't move");
+					// Debug.indicate("micro", 1, "ignoring visible building because somehow we can't move");
 					return;
 				} else { // can only see the enemy HQ.
 					// we are not really fighting. Let's move away from it so we can say we did something
-//					Debug.indicate("micro", 1, "can only see enemy HQ");
+					// Debug.indicate("micro", 1, "can only see enemy HQ");
 					Direction away = theirHQ.directionTo(here);
 					if (rc.canMove(away)) rc.move(away);
 					return;
@@ -459,13 +461,13 @@ public class BotSoldier extends Bot {
 			if (!rc.canMove(tryDir)) continue;
 			if (numEnemiesAttackingDirs[tryDir.ordinal()] > maxEnemyExposure) continue;
 			if (Util.inHQAttackRange(here.add(tryDir), theirHQ)) continue;
-//			Debug.indicate("micro", 1, String.format("cautiously approaching enemy soldier; direction %d; attackers = %d %d %d %d %d %d %d %d",
-//					tryDir.ordinal(), numEnemiesAttackingDirs[0], numEnemiesAttackingDirs[1], numEnemiesAttackingDirs[2], numEnemiesAttackingDirs[3],
-//					numEnemiesAttackingDirs[4], numEnemiesAttackingDirs[5], numEnemiesAttackingDirs[6], numEnemiesAttackingDirs[7]));
+			// Debug.indicate("micro", 1, String.format("cautiously approaching enemy soldier; direction %d; attackers = %d %d %d %d %d %d %d %d",
+			// tryDir.ordinal(), numEnemiesAttackingDirs[0], numEnemiesAttackingDirs[1], numEnemiesAttackingDirs[2], numEnemiesAttackingDirs[3],
+			// numEnemiesAttackingDirs[4], numEnemiesAttackingDirs[5], numEnemiesAttackingDirs[6], numEnemiesAttackingDirs[7]));
 			rc.move(tryDir);
 			return;
 		}
-//		Debug.indicate("micro", 1, "can't safely approach enemy soldier");
+		// Debug.indicate("micro", 1, "can't safely approach enemy soldier");
 	}
 
 	private void harrassTheirHQ() throws GameActionException {
@@ -505,14 +507,14 @@ public class BotSoldier extends Bot {
 			if (!rc.canMove(tryDir)) continue;
 			if (numEnemiesAttackingDirs[tryDir.ordinal()] > 0) continue;
 			if (Util.inHQAttackRange(here.add(tryDir), theirHQ)) continue;
-//			Debug.indicate("micro", 1, String.format("harassing enemy soldier; direction %d; attackers = %d %d %d %d %d %d %d %d", tryDir.ordinal(),
-//					numEnemiesAttackingDirs[0], numEnemiesAttackingDirs[1], numEnemiesAttackingDirs[2], numEnemiesAttackingDirs[3], numEnemiesAttackingDirs[4],
-//					numEnemiesAttackingDirs[5], numEnemiesAttackingDirs[6], numEnemiesAttackingDirs[7]));
+			// Debug.indicate("micro", 1, String.format("harassing enemy soldier; direction %d; attackers = %d %d %d %d %d %d %d %d", tryDir.ordinal(),
+			// numEnemiesAttackingDirs[0], numEnemiesAttackingDirs[1], numEnemiesAttackingDirs[2], numEnemiesAttackingDirs[3], numEnemiesAttackingDirs[4],
+			// numEnemiesAttackingDirs[5], numEnemiesAttackingDirs[6], numEnemiesAttackingDirs[7]));
 			rc.move(tryDir);
 			return;
 		}
 		if (closerToTheirHQ) rc.attackSquare(here.add(toEnemy, 2));
-//		Debug.indicate("micro", 1, "can't safely approach enemy soldier");
+		// Debug.indicate("micro", 1, "can't safely approach enemy soldier");
 	}
 
 	int[] shootX = new int[] { -1, 0, 1, -2, -1, 0, 1, 2, -2, -1, 1, 2, -2, -1, 0, 1, 2, -1, 0, 1 };
@@ -531,7 +533,7 @@ public class BotSoldier extends Bot {
 				}
 			}
 		}
-//		Debug.indicate("micro", 2, "trying to kill cows: mostCows = " + mostCows + " at " + (bestTarget == null ? "null" : bestTarget.toString()));
+		// Debug.indicate("micro", 2, "trying to kill cows: mostCows = " + mostCows + " at " + (bestTarget == null ? "null" : bestTarget.toString()));
 		if (mostCows > 300) {
 			rc.attackSquare(bestTarget);
 			return true;
@@ -656,18 +658,18 @@ public class BotSoldier extends Bot {
 		}
 
 		if (fireOneLastShot) {
-//			Debug.indicate("micro", 2, "parthian shot");
+			// Debug.indicate("micro", 2, "parthian shot");
 			attackASoldier();
 			return;
 		}
 
 		Direction dir = chooseRetreatDirection();
 		if (dir == null) { // Can't retreat! Fight!
-//			Debug.indicate("micro", 2, "couldn't retreat; fighting instead");
+		// Debug.indicate("micro", 2, "couldn't retreat; fighting instead");
 			RobotInfo target = chooseSoldierAttackTarget(attackableEnemies);
 			attackAndRecord(target);
 		} else { // Can retreat. Do it!
-//			Debug.indicate("micro", 2, "retreating successfully");
+		// Debug.indicate("micro", 2, "retreating successfully");
 			rc.move(dir);
 		}
 	}
@@ -769,6 +771,23 @@ public class BotSoldier extends Bot {
 		}
 
 		return null;
+	}
+
+	// If one of our pastrs is within our attack range and is about to die, kill it so that the
+	// other team doesn't get milk for it.
+	private boolean mercyKillPastrs() throws GameActionException {
+		Robot[] allies = rc.senseNearbyGameObjects(Robot.class, RobotType.SOLDIER.attackRadiusMaxSquared, us);
+		for (int i = allies.length; i-- > 0;) {
+			RobotInfo info = rc.senseRobotInfo(allies[i]);
+			if (info.type == RobotType.PASTR) {
+				Debug.indicate("mercy", 0, "pastr health = " + info.health);
+				if (info.health <= RobotType.SOLDIER.attackPower) {
+					rc.attackSquare(info.location);
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	private void attackAndRecord(RobotInfo enemyInfo) throws GameActionException {
