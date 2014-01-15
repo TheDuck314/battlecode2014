@@ -1,10 +1,22 @@
+
+ryancheu = Proxy 2 Gate
+jianty_ = Armada
+
 team052 - The Vegan Police
    1/12: dangerous: beat my hq pastr strat with a better hq pastr implementation.
          on bakedpotato his herding was better. on divide got better map control
          since my guys always retreat, and built a second pastr
 
 team133 - Proxy 2 Gate
-   1/12: dangerous: rushes the my pastr. camps spawn if pastr is in HQ. this starves the HQ
+   1/13: even more dangerous: Their soldiers sit outside my pastr and their 7th and 8th guys
+         build a noise tower + pastr. They haven't figured out the pastr build time finesse.
+         In fact they don't actually engage so they aren't really rushing and I'd beat them
+         handily if I went noise tower first, especially with the pastr build time finesse.
+         But they probably SHOULD be rushing: they'd win if they did. Anyway, they get good
+         map control and get to place their pastr wherever they want, and it has no enemies
+         attacking it and scaring cows, making it very dangerous. If they cleaned up some
+         aspects of this I expect they'd beat me every time probably.
+   1/12: dangerous: rushes my pastr. camps spawn if pastr is in HQ. this starves the HQ
                     pastr of cows. builds a pastr + noise tower in the center at round 1000,
                     which wins if they have map control or loses if some of my guys got out.
                     beat me bad on reticle this way.
@@ -19,6 +31,7 @@ team059 - cereBELLUM
          work well because I quickly kill those. My harrassers were effective
 
 team178 - @Deprecated
+   1/13: was still using HQ noise tower. defeated especially handily by pastr build time finesse
    1/12: Used HQ noise tower. My harrassers were effective so my HQ noise tower won.
    1/9 or so: REALLY NICE ATTACK MICRO THAT ANNIHILATED ME WITH A RUSH
    How their micro seems to work: they hold off until they have a numbers advantage. They signal
@@ -59,11 +72,3 @@ team009 - Noob Status
                                         worked really well! I lost
                                    G#2: he got confused b/c Reticle doesn't have corners, and I won
                                    G#3: another open map; they herded into corners and won
-
-
-team038 - FireAnts
-   NICE CIRCULAR HERDING STRATEGY (EACH SOLDIER HERDS 180 DEGREES AS IT ARRIVES), BUT WEAK TO ATTACKS
-
-team027 - Armada
-   DIDN'T BUILD PASTRS, ONLY ATTACKED MINE (ONE AT A TIME...)
-   
