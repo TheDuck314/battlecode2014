@@ -5,7 +5,7 @@ import battlecode.common.*;
 public class BotNoiseTower extends Bot {
 	public BotNoiseTower(RobotController theRC) {
 		super(theRC);
-//		Debug.init(theRC, "herd");
+		Debug.init(theRC, "pages");
 	}
 
 	MapLocation pastr = null;
@@ -18,10 +18,10 @@ public class BotNoiseTower extends Bot {
 		if (nearestPastr != pastr) {
 			pastr = nearestPastr;
 		}
-		if(pastr == null) pastr = here;
+		if (pastr == null) pastr = here;
 
 		if (!finishedDumbHerding) herdTowardPastrDumb();
-		if (finishedDumbHerding) herdTowardPastrSmart();
+		if (finishedDumbHerding) herdTowardPastrSmart();		
 	}
 
 	private MapLocation findNearestAlliedPastr() {
@@ -60,17 +60,11 @@ public class BotNoiseTower extends Bot {
 	}
 
 	int herdTargetIndex = 0;
-	MapLocation[] herdPoints;
-	Direction[][] squareHerdDirs;
-	int numHerdPoints;
-	// static final int maxHerdPoints = 200;
-	static final int maxHerdPoints = 1000;
-	
 	int smartHerdMaxPoints = 400;
 
 	void herdTowardPastrSmart() throws GameActionException {
 		MapLocation attackTarget;
-		numHerdPoints = HerdPattern.Band.ONE.readNumHerdPoints(rc);
+		int numHerdPoints = HerdPattern.readNumHerdPoints(rc);
 		do {
 			if (herdTargetIndex <= 0) {
 				herdTargetIndex = Math.min(smartHerdMaxPoints, numHerdPoints - 1);
@@ -79,8 +73,8 @@ public class BotNoiseTower extends Bot {
 
 			// MapLocation herdTarget = herdPoints[herdTargetIndex];
 			// Direction pointHerdDir = squareHerdDirs[herdTarget.x][herdTarget.y];
-			MapLocation herdTarget = HerdPattern.Band.ONE.readHerdMapLocation(herdTargetIndex, rc);
-			Direction pointHerdDir = HerdPattern.Band.ONE.readHerdDir(herdTargetIndex, rc);
+			MapLocation herdTarget = HerdPattern.readHerdMapLocation(herdTargetIndex, rc);
+			Direction pointHerdDir = HerdPattern.readHerdDir(herdTargetIndex, rc);
 
 			// attackTarget = herdTarget.add(Util.opposite(pointHerdDir), pointHerdDir.isDiagonal() ? 1 : 2);
 			attackTarget = herdTarget.add(Util.opposite(pointHerdDir), pointHerdDir.isDiagonal() ? 2 : 3);
@@ -88,72 +82,17 @@ public class BotNoiseTower extends Bot {
 			int skip = herdTargetIndex < 100 ? FastRandom.randInt(1, 3) : FastRandom.randInt(1, 7);
 			for (int i = skip; i-- > 0;) {
 				herdTargetIndex--;
-				MapLocation nextHerdTarget = HerdPattern.Band.ONE.readHerdMapLocation(herdTargetIndex, rc);
+				MapLocation nextHerdTarget = HerdPattern.readHerdMapLocation(herdTargetIndex, rc);
 				if (nextHerdTarget.x == 0 || nextHerdTarget.y == 0 || nextHerdTarget.x == rc.getMapWidth() - 1 || nextHerdTarget.y == rc.getMapHeight() - 1) break;
 			}
 
 			// if(herdTargetIndex < 50) herdTargetIndex -= FastRandom.randInt(1, 3);
 			// else herdTargetIndex -= FastRandom.randInt(1, 7);
-//			Debug.indicate("herd", 0, "" + herdTargetIndex);
+			// Debug.indicate("herd", 0, "" + herdTargetIndex);
 			// herdTargetIndex -= 1 + (int)Math.sqrt(herdTargetIndex/2);
 		} while (!rc.canAttackSquare(attackTarget));
 
 		// rc.attackSquareLight(attackTarget);
 		rc.attackSquare(attackTarget);
 	}
-
-	// TODO: optimize lots
-	private void computePastrHerdPattern() {
-		// Useful data
-		int attackRange = RobotType.NOISETOWER.attackRadiusMaxSquared;
-		int mapWidth = rc.getMapWidth();
-		int mapHeight = rc.getMapHeight();
-		Direction[] dirs = new Direction[] { Direction.NORTH_WEST, Direction.SOUTH_WEST, Direction.SOUTH_EAST, Direction.NORTH_EAST, Direction.NORTH,
-				Direction.WEST, Direction.SOUTH, Direction.EAST };
-		int[] dirsX = new int[] { 1, 1, -1, -1, 0, 1, 0, -1 };
-		int[] dirsY = new int[] { 1, -1, -1, 1, 1, 0, -1, 0 };
-
-		// Set up the queue
-		MapLocation[] locQueue = new MapLocation[(2 * RobotType.NOISETOWER.attackRadiusMaxSquared + 1) * (2 * RobotType.NOISETOWER.attackRadiusMaxSquared + 1)];
-		int locQueueHead = 0;
-		int locQueueTail = 0;
-		Direction[][] herdDir;
-		boolean[][] wasQueued = new boolean[GameConstants.MAP_MAX_WIDTH][GameConstants.MAP_MAX_HEIGHT];
-		herdDir = new Direction[GameConstants.MAP_MAX_WIDTH][GameConstants.MAP_MAX_HEIGHT];
-
-		// Push pastr onto queue
-		locQueue[locQueueTail] = pastr;
-		locQueueTail++;
-		wasQueued[pastr.x][pastr.y] = true;
-
-		while (locQueueHead != locQueueTail && locQueueTail < maxHerdPoints) {
-			// pop a location from the queue
-			MapLocation loc = locQueue[locQueueHead];
-			locQueueHead++;
-
-			int locX = loc.x;
-			int locY = loc.y;
-			for (int i = 8; i-- > 0;) {
-				int x = locX + dirsX[i];
-				int y = locY + dirsY[i];
-				if (x > 0 && y > 0 && x < mapWidth && y < mapHeight && !wasQueued[x][y]) {
-					MapLocation newLoc = new MapLocation(x, y);
-					if (here.distanceSquaredTo(newLoc) <= attackRange) {
-						if (rc.senseTerrainTile(newLoc) != TerrainTile.VOID) {
-							herdDir[x][y] = dirs[i];
-							// push newLoc onto queue
-							locQueue[locQueueTail] = newLoc;
-							locQueueTail++;
-							wasQueued[x][y] = true;
-						}
-					}
-				}
-			}
-		}
-
-		herdPoints = locQueue;
-		squareHerdDirs = herdDir;
-		numHerdPoints = locQueueTail;
-	}
-
 }

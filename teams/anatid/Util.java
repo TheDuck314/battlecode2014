@@ -99,24 +99,5 @@ public class Util {
 		if (distSq < 25) return true;
 		else if(distSq > 25) return false;
 		else return (loc.x != hq.x) && (loc.y != hq.y);
-	}
-
-	/*public static void debugBytecodes(String message) {
-		System.out.format("turn: %d, bytecodes: %d: %s\n", Clock.getRoundNum(), Clock.getBytecodeNum(), message);
-	}*/
-
-	static int startRoundNum;
-	static int startBytecodeNum;
-
-	/*public static void timerStart() {
-		startRoundNum = Clock.getRoundNum();
-		startBytecodeNum = Clock.getBytecodeNum();
-	}
-
-	public static void timerEnd(String message) {
-		int endBytecodeNum = Clock.getBytecodeNum();
-		int endRoundNum = Clock.getRoundNum();
-		if (endRoundNum == startRoundNum) System.out.format("timed %s: took %d bytecodes\n", message, endBytecodeNum - startBytecodeNum);
-		else System.out.format("timed %s: took %d turns + %d bytecodes\n", message, endRoundNum - startRoundNum, endBytecodeNum - startBytecodeNum);
-	}*/
+	}	
 }

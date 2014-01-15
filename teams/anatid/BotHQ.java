@@ -5,7 +5,7 @@ import battlecode.common.*;
 public class BotHQ extends Bot {
 	public BotHQ(RobotController theRC) {
 		super(theRC);
-//		Debug.init(rc, "map");
+		Debug.init(rc, "pages");
 
 		cowGrowth = rc.senseCowGrowth();
 	}
@@ -52,13 +52,7 @@ public class BotHQ extends Bot {
 
 		directStrategy();
 
-		// Use spare bytecodes to do pathing computations
-		MapLocation pathingDest;
-		if (attackModeTarget != null) pathingDest = attackModeTarget;
-		else if (computedBestPastrLocation != null) pathingDest = computedBestPastrLocation;
-		else pathingDest = null;
-
-		if (pathingDest != null) Bfs.work(pathingDest, rc, 9000);
+		pathfindWithSpareBytecodes();
 	}
 
 	private void doFirstTurn() throws GameActionException {
@@ -72,7 +66,7 @@ public class BotHQ extends Bot {
 		Strategy.active = pickStrategyByAnalyzingMap();
 		MessageBoard.STRATEGY.writeStrategy(Strategy.active);
 
-//		Debug.indicate("map", 2, "going with " + Strategy.active.toString());
+		// Debug.indicate("map", 2, "going with " + Strategy.active.toString());
 	}
 
 	private int guessTravelRounds(MapLocation start, MapLocation dest) {
@@ -157,10 +151,10 @@ public class BotHQ extends Bot {
 		hqPastrRoundsToWin += RobotType.NOISETOWER.captureTurns;
 		hqPastrRoundsToWin += towerInefficiency;
 
-//		Debug.indicate("map", 0, String.format("fastOpenPastrRoundsToWin = %d, safeOpenPastrRoundsToWin = %d (cows = %f)", fastOpenPastrRoundsToWin,
-//				safeOpenPastrRoundsToWin, openPastrCowGrowth));
-//		Debug.indicate("map", 1, String.format("hqPastrRoundsToWin = %d (cows = %f, slowdown = %f), rushRounds = %d", hqPastrRoundsToWin, hqPastrCowGrowth,
-//				hqSlowdown, openPastrRushRounds));
+		// Debug.indicate("map", 0, String.format("fastOpenPastrRoundsToWin = %d, safeOpenPastrRoundsToWin = %d (cows = %f)", fastOpenPastrRoundsToWin,
+		// safeOpenPastrRoundsToWin, openPastrCowGrowth));
+		// Debug.indicate("map", 1, String.format("hqPastrRoundsToWin = %d (cows = %f, slowdown = %f), rushRounds = %d", hqPastrRoundsToWin, hqPastrCowGrowth,
+		// hqSlowdown, openPastrRushRounds));
 
 		Strategy strat;
 
@@ -289,12 +283,12 @@ public class BotHQ extends Bot {
 
 		if (attackModeTriggered) {
 			attackModeTarget = chooseEnemyPastrAttackTarget();
-			
-			//If we don't have a pastr, and we can't kill theirs, don't try to 
-			if(ourPastrs.length == 0 && attackModeTarget != null && attackModeTarget.isAdjacentTo(theirHQ)) {
+
+			// If we don't have a pastr, and we can't kill theirs, don't try to
+			if (ourPastrs.length == 0 && attackModeTarget != null && attackModeTarget.isAdjacentTo(theirHQ)) {
 				attackModeTarget = null;
 			}
-			
+
 			// if there's no pastr to attack, decide whether to camp their spawn or to defend/rebuid our pastr:
 			if (attackModeTarget == null) {
 				// first, if our pastr has been destroyed we need to rebuild it instead of attacking.
@@ -460,7 +454,25 @@ public class BotHQ extends Bot {
 				return true;
 			}
 		}
-		
+
 		return false;
+	}
+
+	private void pathfindWithSpareBytecodes() throws GameActionException {
+		MapLocation pathingDest;
+		int bytecodeLimit = 9000;
+		if (attackModeTarget != null) {
+			Bfs.work(attackModeTarget, rc, Bfs.PRIORITY_HIGH, bytecodeLimit);
+			if (Clock.getBytecodeNum() > bytecodeLimit) return;
+			Bfs.work(computedBestPastrLocation, rc, Bfs.PRIORITY_LOW, bytecodeLimit);
+		} else if (computedBestPastrLocation != null) {
+			Bfs.work(computedBestPastrLocation, rc, Bfs.PRIORITY_LOW, bytecodeLimit);
+		}
+
+		//TODO: consider ordering this in a smarter way
+		for (int i = 0; i < theirPastrs.length; i++) {
+			if (Clock.getBytecodeNum() > bytecodeLimit) return;
+			Bfs.work(theirPastrs[i], rc, Bfs.PRIORITY_LOW, bytecodeLimit);
+		}
 	}
 }

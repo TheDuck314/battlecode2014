@@ -222,7 +222,7 @@ public class Nav {
 		// Direction dir = bfsPlan[here.x][here.y];
 		Direction dir = Bfs.readResult(here, dest, rc);
 		if (dir != null && !Util.inHQAttackRange(rc.getLocation().add(dir), enemyHQ)) {
-			//Debug.indicate("nav", 0, "using bfs");
+			Debug.indicate("nav", 0, "using bfs");
 			Direction[] tryDirs = new Direction[] { dir, dir.rotateLeft(), dir.rotateRight() };
 			boolean fight = false;
 			for (int i = 0; i < tryDirs.length; i++) {
@@ -235,7 +235,7 @@ public class Nav {
 				}
 			}
 		} else {
-			//Debug.indicate("nav", 0, "using bug");
+			Debug.indicate("nav", 0, "using bug");
 			bugTo(dest);
 		}
 	}

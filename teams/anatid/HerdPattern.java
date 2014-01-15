@@ -3,45 +3,37 @@ package anatid;
 import battlecode.common.*;
 
 public class HerdPattern {
-	public enum Band {
-		ONE(GameConstants.MAP_MAX_WIDTH * GameConstants.MAP_MAX_HEIGHT);
+	private static final int baseChannel = 4 * GameConstants.MAP_MAX_WIDTH * GameConstants.MAP_MAX_HEIGHT;
 
-		public int baseChannel;
-
-		private Band(int theBaseChannel) {
-			this.baseChannel = theBaseChannel;
-		}
-
-		public void writeNumHerdPoints(int numHerdPoints, RobotController rc) throws GameActionException {
-			rc.broadcast(baseChannel, numHerdPoints);
-		}
-
-		public int readNumHerdPoints(RobotController rc) throws GameActionException {
-			return rc.readBroadcast(baseChannel);
-		}
-
-		public void writeHerdDir(int order, MapLocation loc, Direction dir, RobotController rc) throws GameActionException {
-			int channel = baseChannel + 1 + order;
-			int data = (dir.ordinal() * 100000) + (loc.x * 100) + (loc.y);
-			rc.broadcast(channel, data);
-		}
-
-		public MapLocation readHerdMapLocation(int index, RobotController rc) throws GameActionException {
-			int channel = baseChannel + 1 + index;
-			int data = rc.readBroadcast(channel);
-			data %= 100000;
-			return new MapLocation(data / 100, data % 100);
-		}
-
-		public Direction readHerdDir(int index, RobotController rc) throws GameActionException {
-			int channel = baseChannel + 1 + index;
-			int data = rc.readBroadcast(channel);
-			Direction dir = Direction.values()[data / 100000];
-			return dir;
-		}
+	private static void writeNumHerdPoints(int numHerdPoints, RobotController rc) throws GameActionException {
+		rc.broadcast(baseChannel, numHerdPoints);
 	}
 
-	public static void computeAndPublish(MapLocation here, MapLocation pastr, Band publishBand, RobotController rc) throws GameActionException {
+	public static int readNumHerdPoints(RobotController rc) throws GameActionException {
+		return rc.readBroadcast(baseChannel);
+	}
+
+	private static void writeHerdDir(int order, MapLocation loc, Direction dir, RobotController rc) throws GameActionException {
+		int channel = baseChannel + 1 + order;
+		int data = (dir.ordinal() * 100000) + (loc.x * 100) + (loc.y);
+		rc.broadcast(channel, data);
+	}
+
+	public static MapLocation readHerdMapLocation(int index, RobotController rc) throws GameActionException {
+		int channel = baseChannel + 1 + index;
+		int data = rc.readBroadcast(channel);
+		data %= 100000;
+		return new MapLocation(data / 100, data % 100);
+	}
+
+	public static Direction readHerdDir(int index, RobotController rc) throws GameActionException {
+		int channel = baseChannel + 1 + index;
+		int data = rc.readBroadcast(channel);
+		Direction dir = Direction.values()[data / 100000];
+		return dir;
+	}
+
+	public static void computeAndPublish(MapLocation here, MapLocation pastr, RobotController rc) throws GameActionException {
 		// Useful data
 		int attackRange = RobotType.NOISETOWER.attackRadiusMaxSquared;
 		int mapWidth = rc.getMapWidth();
@@ -55,7 +47,6 @@ public class HerdPattern {
 		MapLocation[] locQueue = new MapLocation[(2 * RobotType.NOISETOWER.attackRadiusMaxSquared + 1) * (2 * RobotType.NOISETOWER.attackRadiusMaxSquared + 1)];
 		int locQueueHead = 0;
 		int locQueueTail = 0;
-		Direction[][] herdDir;
 		boolean[][] wasQueued = new boolean[GameConstants.MAP_MAX_WIDTH][GameConstants.MAP_MAX_HEIGHT];
 
 		// Push pastr onto queue
@@ -77,7 +68,7 @@ public class HerdPattern {
 					MapLocation newLoc = new MapLocation(x, y);
 					if (here.distanceSquaredTo(newLoc) <= attackRange) {
 						if (rc.senseTerrainTile(newLoc) != TerrainTile.VOID) {
-							publishBand.writeHerdDir(locQueueTail, newLoc, dirs[i], rc);
+							writeHerdDir(locQueueTail, newLoc, dirs[i], rc);
 
 							// push newLoc onto queue
 							locQueue[locQueueTail] = newLoc;
@@ -89,6 +80,6 @@ public class HerdPattern {
 			}
 		}
 
-		publishBand.writeNumHerdPoints(locQueueHead, rc);
+		writeNumHerdPoints(locQueueHead, rc);
 	}
 }

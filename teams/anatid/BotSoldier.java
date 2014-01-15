@@ -5,7 +5,7 @@ import battlecode.common.*;
 public class BotSoldier extends Bot {
 	public BotSoldier(RobotController theRC) throws GameActionException {
 		super(theRC);
-		// Debug.init(theRC, "finesse");
+		Debug.init(theRC, "nav");
 		Nav.init(theRC);
 
 		spawnOrder = MessageBoard.SPAWN_COUNT.readInt();
