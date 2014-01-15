@@ -63,8 +63,8 @@ public class BotHQ extends Bot {
 		computeBestPastrLocation();
 		MessageBoard.BEST_PASTR_LOC.writeMapLocation(computedBestPastrLocation);
 
-		// Strategy.active = pickStrategyByAnalyzingMap();
-		Strategy.active = Strategy.RUSH;
+		Strategy.active = pickStrategyByAnalyzingMap();
+		// Strategy.active = Strategy.RUSH;
 		MessageBoard.STRATEGY.writeStrategy(Strategy.active);
 
 		// Debug.indicate("map", 2, "going with " + Strategy.active.toString());

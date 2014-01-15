@@ -153,7 +153,7 @@ public class Bfs {
 		} else {
 			Debug.indicate("pages", 0, "queue already inited");
 		}
-		
+
 		previousDest = dest;
 		previousRoundWorked = Clock.getRoundNum();
 		previousPage = page;

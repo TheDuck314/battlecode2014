@@ -48,6 +48,6 @@ public class Debug {
 
 		int totalBytecodes = GameConstants.BYTECODE_LIMIT * (timerEndRoundNum - timerStartRoundNum) + (timerEndBytecodeNum - timerStartBytecodeNum);
 
-		System.out.println(String.format("timed %s: took %d bytecodes ( = %0.2f turns)\n", message, totalBytecodes, totalBytecodes / (double) GameConstants.BYTECODE_LIMIT));
+		System.out.println(String.format("timed %s: took %d bytecodes ( = %f turns)\n", message, totalBytecodes, totalBytecodes / (double) GameConstants.BYTECODE_LIMIT));
 	}
 }
