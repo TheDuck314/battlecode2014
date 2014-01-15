@@ -140,8 +140,7 @@ public class Bfs {
 		wasQueued[dest.x][dest.y] = true;
 	}
 
-	// HQ calls this function to spend spare bytecodes computing paths for soldiers
-	// Returns true if it completely finishes pathfinding for this destination and there is no more work to be done.
+	// HQ or pastr calls this function to spend spare bytecodes computing paths for soldiers
 	public static void work(MapLocation dest, RobotController rc, int priority, int bytecodeLimit) throws GameActionException {
 		int page = findFreePage(dest, priority, rc);
 		Debug.indicate("pages", 1, "Pathing to " + dest.toString() + "; using page " + page);
