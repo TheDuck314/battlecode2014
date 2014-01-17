@@ -1,3 +1,4 @@
+ir0x539 = Maxwell Mann Tribute Band
 slightlyeskew = Battle Cattle
 nicketh = Proxy 2 Gate
 ryancheu = Proxy 2 Gate
@@ -33,6 +34,7 @@ team059 - cereBELLUM
          work well because I quickly kill those. My harrassers were effective
 
 team178 - @Deprecated
+   1/17: still using HQ NT, but NICE AGGRESSIVE MICRO: see game 2 of 4381
    1/13: was still using HQ noise tower. defeated especially handily by pastr build time finesse
    1/12: Used HQ noise tower. My harrassers were effective so my HQ noise tower won.
    1/9 or so: REALLY NICE ATTACK MICRO THAT ANNIHILATED ME WITH A RUSH
