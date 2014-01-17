@@ -1,5 +1,6 @@
 package anatid;
 
+import anatid.BotSoldier.MicroStance;
 import battlecode.common.*;
 
 public class BotHQ extends Bot {
@@ -63,8 +64,8 @@ public class BotHQ extends Bot {
 		computeBestPastrLocation();
 		MessageBoard.BEST_PASTR_LOC.writeMapLocation(computedBestPastrLocation);
 
-		Strategy.active = pickStrategyByAnalyzingMap();
-		// Strategy.active = Strategy.RUSH;
+		// Strategy.active = pickStrategyByAnalyzingMap();
+		Strategy.active = Strategy.PROXY;
 		MessageBoard.STRATEGY.writeStrategy(Strategy.active);
 
 		// Debug.indicate("map", 2, "going with " + Strategy.active.toString());
@@ -218,6 +219,9 @@ public class BotHQ extends Bot {
 				directStrategyRush();
 				break;
 
+			case PROXY:
+				directStrategyProxy();
+				
 			case MACRO:
 				break;
 
@@ -225,6 +229,24 @@ public class BotHQ extends Bot {
 				System.out.println("Uh oh! Unknown strategy!");
 				break;
 		}
+	}
+	
+	private void directStrategyProxy() throws GameActionException {
+		if(theirPastrs.length == 0) {
+			MapLocation mapCenter = new MapLocation(rc.getMapWidth() / 2, rc.getMapHeight() / 2);
+			while (rc.senseTerrainTile(mapCenter) == TerrainTile.VOID) {
+				mapCenter = mapCenter.add(mapCenter.directionTo(ourHQ));
+			}
+			MessageBoard.RALLY_LOC.writeMapLocation(mapCenter);
+			MessageBoard.BE_AGGRESSIVE.writeBoolean(false);
+		} else if(theirPastrs.length == 1) {
+			MessageBoard.RALLY_LOC.writeMapLocation(theirPastrs[0]);
+		} else {
+			MessageBoard.RALLY_LOC.writeMapLocation(chooseEnemyPastrAttackTarget());
+		}
+		
+		//Tell individual soldiers when to construct noise tower and pastr
+		
 	}
 
 	private void directStrategyRush() throws GameActionException {
@@ -235,7 +257,7 @@ public class BotHQ extends Bot {
 				attackModeTarget = attackModeTarget.add(attackModeTarget.directionTo(ourHQ));
 			}
 		}
-		MessageBoard.ATTACK_LOC.writeMapLocation(attackModeTarget);
+		MessageBoard.RALLY_LOC.writeMapLocation(attackModeTarget);
 	}
 
 	private boolean theyHavePastrOutsideHQ() {
@@ -301,7 +323,7 @@ public class BotHQ extends Bot {
 					}
 				}
 			}
-			MessageBoard.ATTACK_LOC.writeMapLocation(attackModeTarget);
+			MessageBoard.RALLY_LOC.writeMapLocation(attackModeTarget);
 		}
 	}
 

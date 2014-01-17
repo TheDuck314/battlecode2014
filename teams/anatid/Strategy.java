@@ -6,6 +6,7 @@ public enum Strategy {
 	HQ_PASTR, // Build a noise tower then pastr in HQ and harass with soldiers
 	RUSH, // Rally to the middle of the map and rush pastrs as they appear
 	MACRO, // Build several pastrs in nice places (with noise towers??)
+	PROXY, // Proxy 2 Gate's strategy from sprint: rally to center, one enemy builds pastr stand around it and build your own noise tower + pastr
 	UNDECIDED;
 
 	public static Strategy active = UNDECIDED;

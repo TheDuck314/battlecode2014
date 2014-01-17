@@ -4,17 +4,19 @@ import battlecode.common.*;
 
 public enum MessageBoard {
 	BEST_PASTR_LOC(GameConstants.BROADCAST_MAX_CHANNELS - 1),
-	ATTACK_LOC(GameConstants.BROADCAST_MAX_CHANNELS - 2),
-	NOISE_TOWER_BUILD_LOCATION(GameConstants.BROADCAST_MAX_CHANNELS - 3),
-	NOISE_TOWER_BUILD_START_ROUND(GameConstants.BROADCAST_MAX_CHANNELS - 4),
-	ROUND_KILL_COUNT(GameConstants.BROADCAST_MAX_CHANNELS - 5),
-	SPAWN_COUNT(GameConstants.BROADCAST_MAX_CHANNELS - 6),
-	STRATEGY(GameConstants.BROADCAST_MAX_CHANNELS - 7),
-	REBUILDING_HQ_PASTR_ROUND_START(GameConstants.BROADCAST_MAX_CHANNELS - 8);
+	RALLY_LOC(GameConstants.BROADCAST_MAX_CHANNELS - 2),
+	BE_AGGRESSIVE(GameConstants.BROADCAST_MAX_CHANNELS - 3),
+	NOISE_TOWER_BUILD_LOCATION(GameConstants.BROADCAST_MAX_CHANNELS - 4),
+	NOISE_TOWER_BUILD_START_ROUND(GameConstants.BROADCAST_MAX_CHANNELS - 5),
+	ROUND_KILL_COUNT(GameConstants.BROADCAST_MAX_CHANNELS - 6),
+	SPAWN_COUNT(GameConstants.BROADCAST_MAX_CHANNELS - 7),
+	STRATEGY(GameConstants.BROADCAST_MAX_CHANNELS - 8),
+	REBUILDING_HQ_PASTR_ROUND_START(GameConstants.BROADCAST_MAX_CHANNELS - 9);
 
 	public static void setDefaultChannelValues() throws GameActionException {
 		BEST_PASTR_LOC.writeMapLocation(null);
-		ATTACK_LOC.writeMapLocation(null);
+		RALLY_LOC.writeMapLocation(null);
+		BE_AGGRESSIVE.writeBoolean(false);
 		NOISE_TOWER_BUILD_LOCATION.writeMapLocation(null);
 		NOISE_TOWER_BUILD_START_ROUND.writeInt(0);
 		ROUND_KILL_COUNT.writeInt(0);
@@ -45,6 +47,14 @@ public enum MessageBoard {
 	
 	public void incrementInt() throws GameActionException {
 		writeInt(1 + readInt());
+	}
+	
+	public void writeBoolean(boolean bool) throws GameActionException {
+		writeInt(bool ? 1 : 0);
+	}
+	
+	public boolean readBoolean() throws GameActionException {
+		return readInt() == 1;
 	}
 
 	public void writeMapLocation(MapLocation loc) throws GameActionException {

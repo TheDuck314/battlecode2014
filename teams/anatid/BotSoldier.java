@@ -12,7 +12,7 @@ public class BotSoldier extends Bot {
 		// Debug.indicate("buildorder", 0, "I am robot #" + spawnOrder);
 	}
 
-	private enum MicroStance {
+	public enum MicroStance {
 		DEFENSIVE, AGGRESSIVE, HARRASS
 	}
 
@@ -35,8 +35,8 @@ public class BotSoldier extends Bot {
 		}
 
 		updateEnemyData();
-		MapLocation attackTarget = MessageBoard.ATTACK_LOC.readMapLocation();
-		stance = chooseMicroStance(attackTarget);
+		MapLocation rallyLoc = MessageBoard.RALLY_LOC.readMapLocation();
+		stance = chooseMicroStance(rallyLoc);
 		navEngage = stance == MicroStance.AGGRESSIVE ? Nav.Engage.YES : Nav.Engage.NO;
 
 		if (mercyKillPastrs()) return;
@@ -48,12 +48,12 @@ public class BotSoldier extends Bot {
 		}
 
 		// If we are in attack mode, move toward the attack target and engage.
-		if (attackTarget != null) {
-			if (attackTarget.distanceSquaredTo(theirHQ) <= 5 && here.distanceSquaredTo(theirHQ) <= 35) {
+		if (rallyLoc != null) {
+			if (rallyLoc.distanceSquaredTo(theirHQ) <= 5 && here.distanceSquaredTo(theirHQ) <= 35) {
 				harrassTheirHQ();
 				return;
 			} else {
-				Nav.goTo(attackTarget, Nav.Sneak.NO, navEngage);
+				Nav.goTo(rallyLoc, Nav.Sneak.NO, navEngage);
 				// If we didn't move in Nav, try fighting:
 				if (rc.isActive() && visibleEnemies.length > 0) fight();
 				return;
@@ -71,7 +71,7 @@ public class BotSoldier extends Bot {
 
 	// Decide whether to behave aggressively or defensively. Only be aggressive if we are in attack mode
 	// and there is a decent number of allies around, or if we are in any mode and we have a big numbers advantage
-	private MicroStance chooseMicroStance(MapLocation attackTarget) throws GameActionException {
+	private MicroStance chooseMicroStance(MapLocation rallyLoc) throws GameActionException {
 		if (Strategy.active == Strategy.HQ_PASTR) return MicroStance.HARRASS;
 
 		if (visibleEnemies.length == 0) {
@@ -81,7 +81,7 @@ public class BotSoldier extends Bot {
 			numAllies += Math.max(numOtherAlliedSoldiersInRange(here, RobotType.SOLDIER.sensorRadiusSquared),
 					numOtherAlliedSoldiersInRange(Util.closest(visibleEnemies, here), 16));
 
-			if (attackTarget == null) {
+			if (rallyLoc == null || !MessageBoard.BE_AGGRESSIVE.readBoolean()) {
 				if (numAllies >= visibleEnemies.length * 2 || numAllies > visibleEnemies.length + 3) return MicroStance.AGGRESSIVE;
 				else return MicroStance.DEFENSIVE;
 			} else {
