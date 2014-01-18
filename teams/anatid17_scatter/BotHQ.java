@@ -1,6 +1,5 @@
 package anatid17_scatter;
 
-import anatid.BotSoldier.MicroStance;
 import battlecode.common.*;
 
 public class BotHQ extends Bot {
@@ -118,10 +117,16 @@ public class BotHQ extends Bot {
 
 	private void directStrategyShotgun() throws GameActionException {
 		rallyLoc = chooseEnemyPastrAttackTarget();
-		if (rallyLoc == null) {
-			rallyLoc = new MapLocation(rc.getMapWidth() / 2, rc.getMapHeight() / 2);
-			while (rc.senseTerrainTile(rallyLoc) == TerrainTile.VOID) {
-				rallyLoc = rallyLoc.add(rallyLoc.directionTo(ourHQ));
+		if (rallyLoc == null || rallyLoc.distanceSquaredTo(theirHQ) <= 5) {
+			int bestDistSq = 999999;
+			MapLocation soldierCenter = findSoldierCenterOfMass();
+			for (int i = 0; i < numPastrLocations; i++) {
+				MapLocation pastrLoc = bestPastrLocations[i];
+				int distSq = soldierCenter.distanceSquaredTo(pastrLoc);
+				if (distSq < bestDistSq) {
+					bestDistSq = distSq;
+					rallyLoc = pastrLoc;
+				}
 			}
 		}
 		MessageBoard.RALLY_LOC.writeMapLocation(rallyLoc);
@@ -226,7 +231,8 @@ public class BotHQ extends Bot {
 		}
 
 		bestPastrLocations[0] = bestPastrLocation;
-		numPastrLocations = 1;
+		bestPastrLocations[1] = new MapLocation(rc.getMapWidth() - 1 - bestPastrLocation.x, rc.getMapHeight() - 1 - bestPastrLocation.y);
+		numPastrLocations = 2;
 	}
 
 	private boolean attackEnemies() throws GameActionException {
