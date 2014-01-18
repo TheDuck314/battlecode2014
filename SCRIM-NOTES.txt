@@ -1,3 +1,4 @@
+
 ir0x539 = Maxwell Mann Tribute Band
 slightlyeskew = Battle Cattle
 nicketh = Proxy 2 Gate
@@ -5,6 +6,9 @@ ryancheu = Proxy 2 Gate
 jianty_ = Armada
 slumerville = DoYouEvenMilk
 tfk1 = quotes
+
+team121 - Team 7
+   1/18: they're rushing currently, it seems
 
 team052 - The Vegan Police
    1/12: dangerous: beat my hq pastr strat with a better hq pastr implementation.
