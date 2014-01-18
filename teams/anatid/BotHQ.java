@@ -221,6 +221,7 @@ public class BotHQ extends Bot {
 
 			case PROXY:
 				directStrategyProxy();
+				break;
 				
 			case MACRO:
 				break;
