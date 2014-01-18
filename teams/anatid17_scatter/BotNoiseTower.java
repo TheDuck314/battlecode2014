@@ -91,7 +91,14 @@ public class BotNoiseTower extends Bot {
 		}
 
 		while (!rc.canAttackSquare(smart2Loc) || !Util.isOnMap(smart2Loc, rc)) {
-			smart2Loc = smart2Loc.add(smart2Loc.directionTo(pastr));
+			Direction moveDir = smart2Loc.directionTo(pastr);
+			Direction computedMoveDir = HerdPattern.readHerdDir(smart2Loc, rc);
+			if (computedMoveDir != null) moveDir = computedMoveDir;
+			smart2Loc = smart2Loc.add(moveDir);
+			if (here.distanceSquaredTo(smart2Loc) > RobotType.NOISETOWER.attackRadiusMaxSquared) {
+				smart2Loc = null;
+				return;
+			}
 			if (smart2Loc.equals(pastr)) return; // otherwise in some situations we could get an infinite loop
 		}
 

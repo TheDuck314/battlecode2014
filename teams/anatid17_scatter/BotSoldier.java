@@ -706,6 +706,7 @@ public class BotSoldier extends Bot {
 			int distSq = here.distanceSquaredTo(enemyPastrs[i]);
 			if (distSq < smallestEnemyDistSq) smallestEnemyDistSq = distSq;
 		}
+		if (smallestEnemyDistSq > 70) return false;
 		MapLocation[] ourPastrs = rc.sensePastrLocations(us);
 		int smallestAllyDistSq = 999999;
 		for (int i = ourPastrs.length; i-- > 0;) {
