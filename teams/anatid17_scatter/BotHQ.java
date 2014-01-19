@@ -97,8 +97,8 @@ public class BotHQ extends Bot {
 			if (info.type == RobotType.SOLDIER) numAlliedSoldiers++;
 			int id = ally.getID();
 			for (int j = 0; j < numPastrLocations; j++) {
-				if (id == MessageBoard.TOWER_BUILDER_ROBOT_IDS.readInt()) towerBuildersAlive[j] = true;
-				if (id == MessageBoard.PASTR_BUILDER_ROBOT_IDS.readInt()) pastrBuildersAlive[j] = true;
+				if (id == MessageBoard.TOWER_BUILDER_ROBOT_IDS.readCurrentAssignedID(j)) towerBuildersAlive[j] = true;
+				if (id == MessageBoard.PASTR_BUILDER_ROBOT_IDS.readCurrentAssignedID(j)) pastrBuildersAlive[j] = true;
 			}
 		}
 
@@ -120,6 +120,7 @@ public class BotHQ extends Bot {
 		if (rallyLoc == null || rallyLoc.distanceSquaredTo(theirHQ) <= 5) {
 			int bestDistSq = 999999;
 			MapLocation soldierCenter = findSoldierCenterOfMass();
+			if(soldierCenter == null) soldierCenter = ourHQ;
 			for (int i = 0; i < numPastrLocations; i++) {
 				MapLocation pastrLoc = bestPastrLocations[i];
 				int distSq = soldierCenter.distanceSquaredTo(pastrLoc);

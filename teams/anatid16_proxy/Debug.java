@@ -34,8 +34,8 @@ public class Debug {
 		System.out.println(String.format("turn: %d, bytecodes: %d: %s\n", Clock.getRoundNum(), Clock.getBytecodeNum(), message));
 	}
 
-	static int timerStartRoundNum;
-	static int timerStartBytecodeNum;
+	private static int timerStartRoundNum;
+	private static int timerStartBytecodeNum;
 
 	public static void timerStart() {
 		timerStartRoundNum = Clock.getRoundNum();

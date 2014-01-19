@@ -94,4 +94,8 @@ public enum MessageBoard {
 	public boolean checkIfAssignmentUnowned(int index) throws GameActionException {
 		return rc.readBroadcast(channel + index) == -1;
 	}
+	
+	public int readCurrentAssignedID(int index) throws GameActionException {
+		return rc.readBroadcast(channel + index);
+	}
 }

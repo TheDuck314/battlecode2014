@@ -5,7 +5,7 @@ import battlecode.common.*;
 public class BotSoldier extends Bot {
 	public BotSoldier(RobotController theRC) throws GameActionException {
 		super(theRC);
-		Debug.init(theRC, "micro");
+		Debug.init(theRC, "build");
 		Nav.init(theRC);
 
 		spawnOrder = MessageBoard.SPAWN_COUNT.readInt();
@@ -115,11 +115,12 @@ public class BotSoldier extends Bot {
 			MapLocation pastrLoc = bestPastrLocations[i];
 			if (here.equals(pastrLoc)) {
 				// claim the pastr build job if someone else thought they were going to do it
-				if (!MessageBoard.PASTR_BUILDER_ROBOT_IDS.checkIfIOwnAssignment(i)) {
+				if (!MessageBoard.PASTR_BUILDER_ROBOT_IDS.checkIfIOwnAssignment(i)) {					
 					MessageBoard.PASTR_BUILDER_ROBOT_IDS.claimAssignment(i);
 				}
 				// if (Clock.getRoundNum() > 250) {
 				if (Util.containsNoiseTower(rc.senseNearbyGameObjects(Robot.class, pastrLoc, 2, us), rc)) {
+					Debug.indicate("build", 0, "building pastr!");
 					rc.construct(RobotType.PASTR);
 				}
 				return true;
@@ -148,6 +149,7 @@ public class BotSoldier extends Bot {
 
 	private void constructAndAdvertiseNoiseTower(MapLocation pastrLoc) throws GameActionException {
 		rc.construct(RobotType.NOISETOWER);
+		Debug.indicate("build", 0, "building noise tower!");
 		HerdPattern.computeAndPublish(here, pastrLoc, rc);
 	}
 
