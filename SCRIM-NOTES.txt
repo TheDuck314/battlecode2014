@@ -15,6 +15,17 @@ team052 - The Vegan Police
          on bakedpotato his herding was better. on divide got better map control
          since my guys always retreat, and built a second pastr
 
+team009 - Noob Status
+   1/19: DEFINITELY targeting my broadcasts!!
+   1/12: now uses hq pastr with pretty bad noise tower herding. my harrassers were effective
+   REALLY NICE BUG + ROAD HEURISTIC PATHFINDING. MAKES IT OBVIOUS THAT THE BFS IS SLOWING ME DOWN A LOT
+   NICE SOLDIER HERDING INTO CORNERS STRATEGY
+   with framework-1-9: (match 305) G#1: they built 2 pastrs in corners and used soldiers to herd into them
+                                        worked really well! I lost
+                                   G#2: he got confused b/c Reticle doesn't have corners, and I won
+                                   G#3: another open map; they herded into corners and won
+
+
 team133 - Proxy 2 Gate
    1/13: even more dangerous: Their soldiers sit outside my pastr and their 7th and 8th guys
          build a noise tower + pastr. They haven't figured out the pastr build time finesse.
@@ -73,11 +84,3 @@ team225 - The Simple Soldier
    with framework-1-9: they built too many pastrs, and I punished them and won
 
 
-team009 - Noob Status
-   1/12: now uses hq pastr with pretty bad noise tower herding. my harrassers were effective
-   REALLY NICE BUG + ROAD HEURISTIC PATHFINDING. MAKES IT OBVIOUS THAT THE BFS IS SLOWING ME DOWN A LOT
-   NICE SOLDIER HERDING INTO CORNERS STRATEGY
-   with framework-1-9: (match 305) G#1: they built 2 pastrs in corners and used soldiers to herd into them
-                                        worked really well! I lost
-                                   G#2: he got confused b/c Reticle doesn't have corners, and I won
-                                   G#3: another open map; they herded into corners and won
