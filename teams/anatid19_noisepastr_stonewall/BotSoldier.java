@@ -90,7 +90,7 @@ public class BotSoldier extends Bot {
 					break;
 				}
 			}
-			if (visibleEnemies.length > 0 /* && here.distanceSquaredTo(rallyLoc) <= 49 */) {
+			if (visibleEnemies.length > 0 && Util.containsNonHQ(visibleEnemies) /* && here.distanceSquaredTo(rallyLoc) <= 49 */) {
 				if (doVoluntaryDefensiveMicro(sneak)) return;
 			} else {
 				Nav.Engage engage = here.distanceSquaredTo(rallyLoc) > 70 || MessageBoard.BE_AGGRESSIVE.readBoolean() ? Nav.Engage.YES : Nav.Engage.NO;

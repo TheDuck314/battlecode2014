@@ -3,10 +3,24 @@ package anatid;
 import battlecode.common.*;
 
 public class BotNoiseTower extends Bot {
-	public BotNoiseTower(RobotController theRC) throws GameActionException {
-		super(theRC);
-		Debug.init(theRC, "herd");
+	public static void loop(RobotController theRC) throws Exception {
+		init(theRC);
+		while (true) {
+			try {
+				turn();
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+			rc.yield();
+		}
+	}
+	
+	protected static void init(RobotController theRC) throws GameActionException {
+		Bot.init(theRC);
+//		Debug.init(theRC, "herd");
 
+		here = rc.getLocation();
+		
 		// claim the assignment to build this tower so others know not to build it
 		int numPastrLocations = MessageBoard.NUM_PASTR_LOCATIONS.readInt();
 		for (int i = 0; i < numPastrLocations; i++) {
@@ -18,9 +32,10 @@ public class BotNoiseTower extends Bot {
 		}
 	}
 
-	MapLocation pastr = null;
+	static MapLocation here;
+	static MapLocation pastr = null;
 
-	public void turn() throws GameActionException {
+	private static void turn() throws GameActionException {
 		if (!rc.isActive()) return;
 
 		pastr = findNearestAlliedPastr();
@@ -30,18 +45,18 @@ public class BotNoiseTower extends Bot {
 		// herdTowardPastrSmart2();
 	}
 
-	private MapLocation findNearestAlliedPastr() {
+	private static MapLocation findNearestAlliedPastr() {
 		MapLocation[] pastrs = rc.sensePastrLocations(us);
 		return Util.closest(pastrs, here);
 	}
 
 	static final int maxOrthogonalRadius = (int) Math.sqrt(RobotType.NOISETOWER.attackRadiusMaxSquared);
 	static final int maxDiagonalRadius = (int) Math.sqrt(RobotType.NOISETOWER.attackRadiusMaxSquared / 2);
-	Direction attackDir = Direction.NORTH_EAST;
-	int radius = attackDir.isDiagonal() ? maxDiagonalRadius : maxOrthogonalRadius;
+	static Direction attackDir = Direction.NORTH_EAST;
+	static int radius = attackDir.isDiagonal() ? maxDiagonalRadius : maxOrthogonalRadius;
 	static final int[] nextDumbHerdDir = new int[] { 2, 3, 4, 5, 6, 7, 1, 0 };
 
-	private void herdTowardPastrDumb() throws GameActionException {
+	private static void herdTowardPastrDumb() throws GameActionException {
 		MapLocation target = null;
 
 		do {
@@ -60,24 +75,24 @@ public class BotNoiseTower extends Bot {
 		rc.attackSquare(target);
 	}
 
-	boolean tooFarOffMap(MapLocation loc) {
+	private static boolean tooFarOffMap(MapLocation loc) {
 		int W = 2;
 		return loc.x < -W || loc.y < -W || loc.x >= rc.getMapWidth() + W || loc.y >= rc.getMapWidth() + W;
 	}
 
-	MapLocation smart2Loc = null;
-	Direction startDir = Direction.NORTH;
+	static MapLocation smart2Loc = null;
+	static Direction startDir = Direction.NORTH;
 
-	int[] edgesX = new int[] { -2, -1, 0, 1, 2, -3, -2, 2, 3, -3, 3, -3, 3, -3, 3, -3, -2, 2, 3, -2, -1, 0, 1, 2 };
-	int[] edgesY = new int[] { 3, 3, 3, 3, 3, 2, 2, 2, 2, 1, 1, 0, 0, -1, -1, -2, -2, -2, -2, -3, -3, -3, -3, -3 };
-	int edgeTrimIndex = 0;
+	static int[] edgesX = new int[] { -2, -1, 0, 1, 2, -3, -2, 2, 3, -3, 3, -3, 3, -3, 3, -3, -2, 2, 3, -2, -1, 0, 1, 2 };
+	static int[] edgesY = new int[] { 3, 3, 3, 3, 3, 2, 2, 2, 2, 1, 1, 0, 0, -1, -1, -2, -2, -2, -2, -3, -3, -3, -3, -3 };
+	static int edgeTrimIndex = 0;
 
-	private void herdTowardPastrSmart2() throws GameActionException {
+	private static void herdTowardPastrSmart2() throws GameActionException {
 		if (smart2Loc == null || smart2Loc.distanceSquaredTo(pastr) <= GameConstants.PASTR_RANGE) {
 			smart2Loc = pastr.add(startDir, startDir.isDiagonal() ? maxDiagonalRadius - 3 : maxOrthogonalRadius - 3);
 			startDir = startDir.rotateRight();
 			edgeTrimIndex = edgesX.length - 1;
-			Debug.indicate("herd", 0, "starting new spoke");
+//			Debug.indicate("herd", 0, "starting new spoke");
 		}
 
 		while (edgeTrimIndex >= 0) {
@@ -109,7 +124,7 @@ public class BotNoiseTower extends Bot {
 		if (computedHerdDir != null) herdDir = computedHerdDir;
 
 		MapLocation targetSquare = smart2Loc.add(Util.opposite(herdDir), 3);
-		Debug.indicate("herd", 2, "want to attack " + targetSquare.toString());
+//		Debug.indicate("herd", 2, "want to attack " + targetSquare.toString());
 		if (rc.canAttackSquare(targetSquare)) rc.attackSquare(targetSquare);
 		smart2Loc = smart2Loc.add(herdDir);
 	}

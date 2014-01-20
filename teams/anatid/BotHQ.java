@@ -3,42 +3,54 @@ package anatid;
 import battlecode.common.*;
 
 public class BotHQ extends Bot {
-	public BotHQ(RobotController theRC) {
-		super(theRC);
-		Debug.init(rc, "assign");
-
-		cowGrowth = rc.senseCowGrowth();
+	public static void loop(RobotController theRC) throws Exception {
+		init(theRC);
+		while (true) {
+			try {
+				turn();
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+			rc.yield();
+		}
 	}
 
+	protected static void init(RobotController theRC) throws GameActionException {
+		Bot.init(theRC);
+
+		cowGrowth = rc.senseCowGrowth();
+		MessageBoard.setDefaultChannelValues();
+	}
+	
 	// Strategic info
-	int virtualSpawnCountdown = 0;
-	int maxEnemySpawns;
-	int numEnemyPastrs;
-	int maxEnemySoldiers; // An upper bound on the # of enemy soldiers
-	int numAlliedPastrs;
-	int numAlliedSoldiers;
-	int numAlliedNoiseTowers;
-	double ourMilk;
-	double theirMilk;
+	static int virtualSpawnCountdown = 0;
+	static int maxEnemySpawns;
+	static int numEnemyPastrs;
+	static int maxEnemySoldiers; // An upper bound on the # of enemy soldiers
+	static int numAlliedPastrs;
+	static int numAlliedSoldiers;
+	static int numAlliedNoiseTowers;
+	static double ourMilk;
+	static double theirMilk;
 
-	MapLocation rallyLoc = null;
+	static MapLocation rallyLoc = null;
 
-	boolean onePastrAttackModeTriggered = false;
+	static boolean onePastrAttackModeTriggered = false;
 
-	boolean proxyPastrBuildTriggered = false;
+	static boolean proxyPastrBuildTriggered = false;
 
-	MapLocation[] theirPastrs;
-	MapLocation[] ourPastrs;
-	RobotInfo[] allAllies;
+	static MapLocation[] theirPastrs;
+	static MapLocation[] ourPastrs;
+	static RobotInfo[] allAllies;
 
 	// Used for pastr placement
-	double[][] cowGrowth;
-	double[][] computedPastrScores = null;
+	static double[][] cowGrowth;
+	static double[][] computedPastrScores = null;
 	public static final int MAX_PASTR_LOCATIONS = 10;
-	MapLocation[] bestPastrLocations = new MapLocation[MAX_PASTR_LOCATIONS];
-	int numPastrLocations = 0;
+	static MapLocation[] bestPastrLocations = new MapLocation[MAX_PASTR_LOCATIONS];
+	static int numPastrLocations = 0;
 
-	public void turn() throws GameActionException {
+	private static void turn() throws GameActionException {
 		updateStrategicInfo();
 
 		// First turn gets special treatment: spawn then do a bunch of computation
@@ -57,8 +69,7 @@ public class BotHQ extends Bot {
 		pathfindWithSpareBytecodes();
 	}
 
-	private void doFirstTurn() throws GameActionException {
-		MessageBoard.setDefaultChannelValues();
+	private static void doFirstTurn() throws GameActionException {
 		spawnSoldier();
 
 		computePastrScoresNonProxy();
@@ -72,19 +83,19 @@ public class BotHQ extends Bot {
 		}
 	}
 
-	private void broadcastBestPastrLocations() throws GameActionException {
+	private static void broadcastBestPastrLocations() throws GameActionException {
 		for (int i = 0; i < numPastrLocations; i++) {
 			MessageBoard.BEST_PASTR_LOCATIONS.writeToMapLocationList(i, bestPastrLocations[i]);
 		}
 		MessageBoard.NUM_PASTR_LOCATIONS.writeInt(numPastrLocations);
 	}
 
-	private Strategy pickStrategyByAnalyzingMap() throws GameActionException {
+	private static Strategy pickStrategyByAnalyzingMap() throws GameActionException {
 		return Strategy.PROXY_ATTACK;
 		// return Strategy.ONE_PASTR;
 	}
 
-	private void updateStrategicInfo() throws GameActionException {
+	private static void updateStrategicInfo() throws GameActionException {
 		theirPastrs = rc.sensePastrLocations(them);
 		numEnemyPastrs = theirPastrs.length;
 		ourPastrs = rc.sensePastrLocations(us);
@@ -129,7 +140,7 @@ public class BotHQ extends Bot {
 		theirMilk = rc.senseTeamMilkQuantity(them);
 	}
 
-	private void directStrategy() throws GameActionException {
+	private static void directStrategy() throws GameActionException {
 		switch (Strategy.active) {
 			case ONE_PASTR:
 				directStrategyOnePastr();
@@ -150,7 +161,7 @@ public class BotHQ extends Bot {
 		}
 	}
 
-	private void directStrategyProxy() throws GameActionException {
+	private static void directStrategyProxy() throws GameActionException {
 		boolean beAggressive = false;
 		if (numEnemyPastrs == 0) {
 			if (proxyPastrBuildTriggered) {
@@ -181,7 +192,7 @@ public class BotHQ extends Bot {
 		}
 	}
 
-	private void directStrategyScatter() throws GameActionException {
+	private static void directStrategyScatter() throws GameActionException {
 		rallyLoc = chooseEnemyPastrAttackTarget();
 		boolean beAggressive = false;
 		if (rallyLoc == null || rallyLoc.distanceSquaredTo(theirHQ) <= 5) {
@@ -202,7 +213,7 @@ public class BotHQ extends Bot {
 		MessageBoard.BE_AGGRESSIVE.writeBoolean(beAggressive);
 	}
 
-	private void directStrategyOnePastr() throws GameActionException {
+	private static void directStrategyOnePastr() throws GameActionException {
 		boolean desperation = false;
 
 		// Decided whether to trigger attack mode
@@ -262,7 +273,7 @@ public class BotHQ extends Bot {
 		MessageBoard.RALLY_LOC.writeMapLocation(rallyLoc);
 	}
 
-	private boolean theyHavePastrOutsideHQ() {
+	private static boolean theyHavePastrOutsideHQ() {
 		for (int i = numEnemyPastrs; i-- > 0;) {
 			if (!theirPastrs[i].isAdjacentTo(theirHQ)) {
 				return true;
@@ -271,7 +282,7 @@ public class BotHQ extends Bot {
 		return false;
 	}
 
-	private MapLocation findSoldierCenterOfMass() {
+	private static MapLocation findSoldierCenterOfMass() {
 		int x = 0;
 		int y = 0;
 		int N = 0;
@@ -288,7 +299,7 @@ public class BotHQ extends Bot {
 		return new MapLocation(x / N, y / N);
 	}
 
-	private MapLocation chooseEnemyPastrAttackTarget() {
+	private static MapLocation chooseEnemyPastrAttackTarget() {
 		MapLocation soldierCenter = findSoldierCenterOfMass();
 
 		if (soldierCenter == null) soldierCenter = ourHQ;
@@ -309,7 +320,7 @@ public class BotHQ extends Bot {
 	}
 
 	// TODO: this takes a little too long on big maps
-	private void computePastrScoresNonProxy() {
+	private static void computePastrScoresNonProxy() {
 		int mapWidth = rc.getMapWidth();
 		int mapHeight = rc.getMapHeight();
 		double mapSize = Math.hypot(mapWidth, mapHeight);
@@ -350,7 +361,7 @@ public class BotHQ extends Bot {
 	}
 
 	// TODO: this takes a little too long on big maps
-	private void computePastrScoresProxy() {
+	private static void computePastrScoresProxy() {
 		int mapWidth = rc.getMapWidth();
 		int mapHeight = rc.getMapHeight();
 		double mapSize = Math.hypot(mapWidth, mapHeight);
@@ -397,7 +408,7 @@ public class BotHQ extends Bot {
 		computedPastrScores = pastrScores;
 	}
 
-	private void computeBestPastrLocations() {
+	private static void computeBestPastrLocations() {
 		MapLocation bestPastrLocation = null;
 		double bestPastrScore = -999;
 
@@ -419,8 +430,8 @@ public class BotHQ extends Bot {
 		numPastrLocations = 1;
 	}
 
-	private boolean attackEnemies() throws GameActionException {
-		Robot[] enemies = rc.senseNearbyGameObjects(Robot.class, here, 25, them);
+	private static boolean attackEnemies() throws GameActionException {
+		Robot[] enemies = rc.senseNearbyGameObjects(Robot.class, ourHQ, 25, them);
 		if (enemies.length == 0) return false;
 
 		double bestTotalDamage = 0;
@@ -428,13 +439,13 @@ public class BotHQ extends Bot {
 		for (int i = enemies.length; i-- > 0;) {
 			RobotInfo info = rc.senseRobotInfo(enemies[i]);
 			MapLocation enemyLoc = info.location;
-			if (!Util.inHQAttackRange(enemyLoc, here)) continue;
+			if (!Util.inHQAttackRange(enemyLoc, ourHQ)) continue;
 
-			int distSq = here.distanceSquaredTo(enemyLoc);
+			int distSq = ourHQ.distanceSquaredTo(enemyLoc);
 			MapLocation target = enemyLoc;
 			double directDamage = RobotType.HQ.attackPower - RobotType.HQ.splashPower;
 			if (distSq > RobotType.HQ.attackRadiusMaxSquared) {
-				target = target.add(target.directionTo(here));
+				target = target.add(target.directionTo(ourHQ));
 				directDamage = 0;
 			}
 
@@ -452,13 +463,13 @@ public class BotHQ extends Bot {
 		return true;
 	}
 
-	private boolean spawnSoldier() throws GameActionException {
+	private static boolean spawnSoldier() throws GameActionException {
 		if (rc.senseRobotCount() >= GameConstants.MAX_ROBOTS) return false;
 		// if (rc.senseRobotCount() >= 2) return false;
 
 		int spawnCount = MessageBoard.SPAWN_COUNT.readInt();
 
-		Direction startDir = here.directionTo(theirHQ);
+		Direction startDir = ourHQ.directionTo(theirHQ);
 		if (startDir.isDiagonal()) startDir = startDir.rotateRight();
 
 		// We prefer to spawn on orthogonal directions; this is slightly better for the hq pastr strat
@@ -475,7 +486,7 @@ public class BotHQ extends Bot {
 		return false;
 	}
 
-	private void pathfindWithSpareBytecodes() throws GameActionException {
+	private static void pathfindWithSpareBytecodes() throws GameActionException {
 		int bytecodeLimit = 9000;
 
 		if (Clock.getBytecodeNum() > bytecodeLimit) return;

@@ -132,6 +132,13 @@ public class Util {
 		return ret;
 	}
 
+	public static boolean containsNonHQ(RobotInfo[] infos) {
+		for (int i = infos.length; i-- > 0;) {
+			if (infos[i].type != RobotType.HQ) return true;
+		}
+		return false;
+	}
+
 	public static boolean containsNoiseTower(Robot[] robots, RobotController rc) throws GameActionException {
 		for (int i = robots.length; i-- > 0;) {
 			if (rc.senseRobotInfo(robots[i]).type == RobotType.NOISETOWER) return true;

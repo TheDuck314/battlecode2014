@@ -3,9 +3,21 @@ package anatid;
 import battlecode.common.*;
 
 public class BotPastr extends Bot {
-	public BotPastr(RobotController theRC) throws GameActionException {
-		super(theRC);
-		Debug.init(theRC, "pages");
+	public static void loop(RobotController theRC) throws Exception {
+		init(theRC);
+		while (true) {
+			try {
+				turn();
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+			rc.yield();
+		}
+	}
+
+	protected static void init(RobotController theRC) throws GameActionException {
+		Bot.init(theRC);
+//		Debug.init(theRC, "pages");
 		
 		//claim the assignment to build this pastr so others know not to build it
 		int numPastrLocations = MessageBoard.NUM_PASTR_LOCATIONS.readInt();
@@ -18,7 +30,11 @@ public class BotPastr extends Bot {
 		}
 	}
 
-	public void turn() throws GameActionException {
+	private static void turn() throws GameActionException {
+		if(rc.getHealth() <= 6 * RobotType.SOLDIER.attackPower) {
+			MessageBoard.PASTR_DISTRESS_SIGNAL.writeInt(Clock.getRoundNum());
+		}
+		
 		// do speculative pathing calculations
 		int bytecodeLimit = 9000;
 		MapLocation[] enemyPastrs = rc.sensePastrLocations(them);

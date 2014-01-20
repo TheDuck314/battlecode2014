@@ -155,14 +155,14 @@ public class Bfs {
 	// HQ or pastr calls this function to spend spare bytecodes computing paths for soldiers
 	public static void work(MapLocation dest, int priority, int bytecodeLimit) throws GameActionException {
 		int page = findFreePage(dest, priority);
-		Debug.indicate("pages", 1, "Pathing to " + dest.toString() + "; using page " + page);
+//		Debug.indicate("pages", 1, "Pathing to " + dest.toString() + "; using page " + page);
 		if (page == -1) return; // We can't do any work, or don't have to
 
 		if (!dest.equals(previousDest)) {
-			Debug.indicate("pages", 0, "initingQueue");
+//			Debug.indicate("pages", 0, "initingQueue");
 			initQueue(dest);
 		} else {
-			Debug.indicate("pages", 0, "queue already inited");
+//			Debug.indicate("pages", 0, "queue already inited");
 		}
 
 		previousDest = dest;
@@ -199,7 +199,7 @@ public class Bfs {
 		}
 
 		boolean finished = locQueueHead == locQueueTail;
-		Debug.indicate("pages", 2, "finished = " + finished + "; locQueueHead = " + locQueueHead);
+//		Debug.indicate("pages", 2, "finished = " + finished + "; locQueueHead = " + locQueueHead);
 		writePageMetadata(page, Clock.getRoundNum(), dest, priority, finished);
 	}
 

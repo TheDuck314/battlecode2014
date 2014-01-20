@@ -207,7 +207,7 @@ public class Nav {
 	}
 
 	public static void goTo(MapLocation theDest, Sneak theSneak, Engage theEngage, int[] theNumEnemiesAttackingMoveDirs) throws GameActionException {
-		Debug.indicate("nav", 1, "goTo " + theDest.toString());
+//		Debug.indicate("nav", 1, "goTo " + theDest.toString());
 
 		sneak = (theSneak == Sneak.YES);
 		engage = (theEngage == Engage.YES);
@@ -226,11 +226,11 @@ public class Nav {
 		if (!rc.isActive()) return;
 
 		if (tryMoveBfs(here)) {
-			Debug.indicate("nav", 0, "using bfs");
+//			Debug.indicate("nav", 0, "using bfs");
 			return;
 		}
 
-		Debug.indicate("nav", 0, "using bug");
+//		Debug.indicate("nav", 0, "using bug");
 		bugTo(dest);
 	}
 
@@ -278,7 +278,7 @@ public class Nav {
 				ret = numAllies - numEnemies <= 2;
 				break;
 		}
-		Debug.indicate("losing", 1, "countingCenter = " + countingCenter.toString() + "; numEnemies = " + numEnemies + ", numAllies = " + numAllies);
+//		Debug.indicate("losing", 1, "countingCenter = " + countingCenter.toString() + "; numEnemies = " + numEnemies + ", numAllies = " + numAllies);
 		haveCachedEntersLosingFightDecision = true;
 		cachedEntersLosingFightDecision = ret;
 		return ret;
