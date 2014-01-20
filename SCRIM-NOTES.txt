@@ -7,6 +7,16 @@ jianty_ = Armada
 slumerville = DoYouEvenMilk
 tfk1 = quotes
 
+team160 - 0xg
+   1/19: eventually (sometimes) builds a pastr and then tries to defend it with a phalanx of
+         8 soldiers in the adjacent squares. Doesn't seem to build a noise tower. The defense isn't
+         very effective.
+
+team117 - Fragments of a Hologram Rose
+   1/19: he's imitating proxy's sprint strategy, with some success
+   HAS SOME REALLY COOL PATHFINDING: SEE GAME 752
+   with framework-1-9: they built all pastrs early, I punished them and won
+
 team121 - Team 7
    1/18: they're rushing currently, it seems
 
@@ -71,9 +81,6 @@ team018 - NP-Compete
    with circular herding, which is pretty fast and effect on the right maps.
    WOULD HAVE LOST TO THEM EXCEPT THEY DIDN'T KNOW ABOUT THE HQ BUG
 
-team117 - Fragments of a Hologram Rose
-   HAS SOME REALLY COOL PATHFINDING: SEE GAME 752
-   with framework-1-9: they built all pastrs early, I punished them and won
 
 team056 - baumteam
    with framework-1-9: they try to use soldiers to herd into pastrs next to HQ

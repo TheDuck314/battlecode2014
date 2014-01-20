@@ -26,8 +26,8 @@ public class BotNoiseTower extends Bot {
 		pastr = findNearestAlliedPastr();
 		if (pastr == null || here.distanceSquaredTo(pastr) > RobotType.NOISETOWER.attackRadiusMaxSquared) pastr = here;
 
-		// herdTowardPastrDumb();
-		herdTowardPastrSmart2();
+		herdTowardPastrDumb();
+		// herdTowardPastrSmart2();
 	}
 
 	private MapLocation findNearestAlliedPastr() {
@@ -37,8 +37,9 @@ public class BotNoiseTower extends Bot {
 
 	static final int maxOrthogonalRadius = (int) Math.sqrt(RobotType.NOISETOWER.attackRadiusMaxSquared);
 	static final int maxDiagonalRadius = (int) Math.sqrt(RobotType.NOISETOWER.attackRadiusMaxSquared / 2);
-	Direction attackDir = Direction.NORTH;
+	Direction attackDir = Direction.NORTH_EAST;
 	int radius = attackDir.isDiagonal() ? maxDiagonalRadius : maxOrthogonalRadius;
+	static final int[] nextDumbHerdDir = new int[] { 2, 3, 4, 5, 6, 7, 1, 0 };
 
 	private void herdTowardPastrDumb() throws GameActionException {
 		MapLocation target = null;
@@ -50,7 +51,8 @@ public class BotNoiseTower extends Bot {
 
 			radius--;
 			if (radius <= (attackDir.isDiagonal() ? 3 : 5)) {
-				attackDir = attackDir.rotateRight();
+				//attackDir = attackDir.rotateRight();
+				attackDir = Direction.values()[nextDumbHerdDir[attackDir.ordinal()]];
 				radius = attackDir.isDiagonal() ? maxDiagonalRadius : maxOrthogonalRadius;
 			}
 		} while (tooFarOffMap(target) || !rc.canAttackSquare(target));

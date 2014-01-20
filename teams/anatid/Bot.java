@@ -18,7 +18,6 @@ public abstract class Bot {
 
 		FastRandom.init();
 		MessageBoard.init(theRC);
-		//Debug.init(rc, "pop");
 	}
 
 	void updateData() {

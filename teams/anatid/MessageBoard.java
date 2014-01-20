@@ -3,26 +3,31 @@ package anatid;
 import battlecode.common.*;
 
 public enum MessageBoard {
-	BEST_PASTR_LOC(GameConstants.BROADCAST_MAX_CHANNELS - 1),
 	RALLY_LOC(GameConstants.BROADCAST_MAX_CHANNELS - 2),
 	BE_AGGRESSIVE(GameConstants.BROADCAST_MAX_CHANNELS - 3),
-	NOISE_TOWER_BUILD_LOCATION(GameConstants.BROADCAST_MAX_CHANNELS - 4),
-	NOISE_TOWER_BUILD_START_ROUND(GameConstants.BROADCAST_MAX_CHANNELS - 5),
-	ROUND_KILL_COUNT(GameConstants.BROADCAST_MAX_CHANNELS - 6),
-	SPAWN_COUNT(GameConstants.BROADCAST_MAX_CHANNELS - 7),
-	STRATEGY(GameConstants.BROADCAST_MAX_CHANNELS - 8),
-	REBUILDING_HQ_PASTR_ROUND_START(GameConstants.BROADCAST_MAX_CHANNELS - 9);
+	ROUND_KILL_COUNT(GameConstants.BROADCAST_MAX_CHANNELS - 4),
+	SPAWN_COUNT(GameConstants.BROADCAST_MAX_CHANNELS - 5),
+	STRATEGY(GameConstants.BROADCAST_MAX_CHANNELS - 6),
+	PROXY_PASTR_BUILD_TRIGGERED(GameConstants.BROADCAST_MAX_CHANNELS - 7),
+	NUM_PASTR_LOCATIONS(GameConstants.BROADCAST_MAX_CHANNELS - 10),
+	BEST_PASTR_LOCATIONS(GameConstants.BROADCAST_MAX_CHANNELS - 20),
+	TOWER_BUILDER_ROBOT_IDS(GameConstants.BROADCAST_MAX_CHANNELS - 30),
+	PASTR_BUILDER_ROBOT_IDS(GameConstants.BROADCAST_MAX_CHANNELS - 40);
+
 
 	public static void setDefaultChannelValues() throws GameActionException {
-		BEST_PASTR_LOC.writeMapLocation(null);
 		RALLY_LOC.writeMapLocation(null);
 		BE_AGGRESSIVE.writeBoolean(false);
-		NOISE_TOWER_BUILD_LOCATION.writeMapLocation(null);
-		NOISE_TOWER_BUILD_START_ROUND.writeInt(0);
 		ROUND_KILL_COUNT.writeInt(0);
 		SPAWN_COUNT.writeInt(0);
 		STRATEGY.writeStrategy(Strategy.UNDECIDED);
-		REBUILDING_HQ_PASTR_ROUND_START.writeInt(0);
+		PROXY_PASTR_BUILD_TRIGGERED.writeBoolean(false);
+		NUM_PASTR_LOCATIONS.writeInt(0);		
+		for (int i = 0; i < BotHQ.MAX_PASTR_LOCATIONS; i++) {
+			BEST_PASTR_LOCATIONS.writeMapLocation(null);
+			TOWER_BUILDER_ROBOT_IDS.clearAssignment(i);
+			PASTR_BUILDER_ROBOT_IDS.clearAssignment(i);
+		}
 	}
 	
 	private static RobotController rc;
@@ -74,5 +79,36 @@ public enum MessageBoard {
 	
 	public Strategy readStrategy() throws GameActionException {
 		return Strategy.values()[readInt()];
+	}
+
+	public void writeToMapLocationList(int index, MapLocation loc) throws GameActionException {
+		int data = (loc == null ? -999 : loc.x * GameConstants.MAP_MAX_HEIGHT + loc.y);
+		rc.broadcast(channel + index, data);
+	}
+
+	public MapLocation readFromMapLocationList(int index) throws GameActionException {
+		int data = rc.readBroadcast(channel + index);
+		if (data == -999) return null;
+		else return new MapLocation(data / GameConstants.MAP_MAX_HEIGHT, data % GameConstants.MAP_MAX_HEIGHT);
+	}
+
+	public void claimAssignment(int index) throws GameActionException {
+		rc.broadcast(channel + index, rc.getRobot().getID());
+	}
+
+	public void clearAssignment(int index) throws GameActionException {
+		rc.broadcast(channel + index, -1);
+	}
+
+	public boolean checkIfIOwnAssignment(int index) throws GameActionException {
+		return rc.readBroadcast(channel + index) == rc.getRobot().getID();
+	}
+
+	public boolean checkIfAssignmentUnowned(int index) throws GameActionException {
+		return rc.readBroadcast(channel + index) == -1;
+	}
+	
+	public int readCurrentAssignedID(int index) throws GameActionException {
+		return rc.readBroadcast(channel + index);
 	}
 }

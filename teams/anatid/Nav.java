@@ -7,15 +7,20 @@ public class Nav {
 	private static RobotController rc;
 	private static boolean sneak = false;
 	private static boolean engage = false;
+	private static int[] numEnemiesAttackingMoveDirs;
+	private static boolean haveCachedEntersLosingFightDecision = false;
+	private static boolean cachedEntersLosingFightDecision;
 
 	private static MapLocation enemyHQ; // we can't ever go too near the enemy HQ
 
 	private enum BugState {
-		DIRECT, BUG
+		DIRECT,
+		BUG
 	}
 
 	private enum WallSide {
-		LEFT, RIGHT
+		LEFT,
+		RIGHT
 	}
 
 	private static BugState bugState;
@@ -33,7 +38,7 @@ public class Nav {
 		Direction[] dirs = new Direction[] { toDest, toDest.rotateLeft(), toDest.rotateRight() };
 		for (Direction dir : dirs) {
 			if (canMoveSafely(dir)) {
-				if (engage || !moveEntersFight(dir)) {
+				if (moveIsAllowedByEngagementRules(dir)) {
 					boolean road = rc.senseTerrainTile(here.add(dir)) == TerrainTile.ROAD;
 					int score = road ? 2 : 1;
 					if (score > bestScore) {
@@ -60,7 +65,7 @@ public class Nav {
 	private static Direction findBugMoveDir() throws GameActionException {
 		Direction dir = bugLookStartDir;
 		for (int i = 8; i-- > 0;) {
-			if (canMoveSafely(dir) && (engage || !moveEntersFight(dir))) return dir;
+			if (canMoveSafely(dir) && moveIsAllowedByEngagementRules(dir)) return dir;
 			dir = (bugWallSide == WallSide.LEFT ? dir.rotateRight() : dir.rotateLeft());
 		}
 		return null;
@@ -154,7 +159,7 @@ public class Nav {
 		for (int i = 0; i < dirs.length; i++) {
 			Direction dir = dirs[i];
 			if (canMoveSafely(dir)) {
-				if (engage || !moveEntersFight(dir)) {
+				if (moveIsAllowedByEngagementRules(dir)) {
 					int score = (i == 0 ? 2 : 1);
 
 					// Give a big score for ending on a road, but only if the BFS doesn't tell us to backtrack
@@ -192,18 +197,21 @@ public class Nav {
 	}
 
 	public enum Sneak {
-		YES, NO
+		YES,
+		NO
 	}
 
 	public enum Engage {
-		YES, NO
+		YES,
+		NO
 	}
 
-	public static void goTo(MapLocation theDest, Sneak theSneak, Engage theEngage) throws GameActionException {
+	public static void goTo(MapLocation theDest, Sneak theSneak, Engage theEngage, int[] theNumEnemiesAttackingMoveDirs) throws GameActionException {
 		Debug.indicate("nav", 1, "goTo " + theDest.toString());
 
 		sneak = (theSneak == Sneak.YES);
 		engage = (theEngage == Engage.YES);
+		numEnemiesAttackingMoveDirs = theNumEnemiesAttackingMoveDirs;
 
 		if (!theDest.equals(dest)) {
 			dest = theDest;
@@ -234,12 +242,31 @@ public class Nav {
 		return rc.canMove(dir) && !Util.inHQAttackRange(rc.getLocation().add(dir), enemyHQ);
 	}
 
+	private static boolean moveIsAllowedByEngagementRules(Direction dir) throws GameActionException {
+		if (engage) return !moveEntersLosingFight(dir);
+		else return !moveEntersFight(dir);
+	}
+
 	private static boolean moveEntersFight(Direction dir) throws GameActionException {
-		Robot[] engagedUnits = rc.senseNearbyGameObjects(Robot.class, rc.getLocation().add(dir), RobotType.SOLDIER.attackRadiusMaxSquared, rc.getTeam()
-				.opponent());
-		for (int i = engagedUnits.length; i-- > 0;) {
-			if (rc.senseRobotInfo(engagedUnits[i]).type == RobotType.SOLDIER) return true;
-		}
-		return false;
+		return numEnemiesAttackingMoveDirs[dir.ordinal()] > 0;
+	}
+
+	private static boolean moveEntersLosingFight(Direction dir) throws GameActionException {
+		if (!moveEntersFight(dir)) return false;
+		// This function is expensive, so the first time we call it for any direction, we cache the result for the rest of
+		// the turn so that we don't have to redo the analysis
+		if (haveCachedEntersLosingFightDecision) return cachedEntersLosingFightDecision;
+
+		MapLocation moveDest = rc.getLocation().add(dir);
+		Robot[] engagedUnits = rc.senseNearbyGameObjects(Robot.class, moveDest, RobotType.SOLDIER.attackRadiusMaxSquared, rc.getTeam().opponent());
+		MapLocation countingCenter = Util.closestNonConstructingSoldier(engagedUnits, moveDest, rc);
+		if (countingCenter == null) return false;
+		int numEnemies = Util.countNonConstructingSoldiers(rc.senseNearbyGameObjects(Robot.class, countingCenter, 30, rc.getTeam().opponent()), rc);
+		int numAllies = 1 + Util.countNonConstructingSoldiers(rc.senseNearbyGameObjects(Robot.class, countingCenter, 30, rc.getTeam()), rc);
+		boolean ret = numEnemies >= numAllies;
+		Debug.indicate("losing", 1, "countingCenter = " + countingCenter.toString() + "; numEnemies = " + numEnemies + ", numAllies = " + numAllies);
+		haveCachedEntersLosingFightDecision = true;
+		cachedEntersLosingFightDecision = ret;
+		return ret;
 	}
 }
