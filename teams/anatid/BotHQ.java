@@ -5,7 +5,7 @@ import battlecode.common.*;
 public class BotHQ extends Bot {
 	public BotHQ(RobotController theRC) {
 		super(theRC);
-		Debug.init(rc, "pages");
+		Debug.init(rc, "assign");
 
 		cowGrowth = rc.senseCowGrowth();
 	}
@@ -64,17 +64,24 @@ public class BotHQ extends Bot {
 		computePastrScoresNonProxy();
 		computeBestPastrLocations();
 
-		MessageBoard.NUM_PASTR_LOCATIONS.writeInt(numPastrLocations);
+		Strategy.active = pickStrategyByAnalyzingMap();
+		MessageBoard.STRATEGY.writeStrategy(Strategy.active);
+
+		if (Strategy.active == Strategy.ONE_PASTR || Strategy.active == Strategy.SCATTER) {
+			broadcastBestPastrLocations();
+		}
+	}
+
+	private void broadcastBestPastrLocations() throws GameActionException {
 		for (int i = 0; i < numPastrLocations; i++) {
 			MessageBoard.BEST_PASTR_LOCATIONS.writeToMapLocationList(i, bestPastrLocations[i]);
 		}
-
-		Strategy.active = pickStrategyByAnalyzingMap();
-		MessageBoard.STRATEGY.writeStrategy(Strategy.active);
+		MessageBoard.NUM_PASTR_LOCATIONS.writeInt(numPastrLocations);
 	}
 
 	private Strategy pickStrategyByAnalyzingMap() throws GameActionException {
 		return Strategy.PROXY_ATTACK;
+		// return Strategy.ONE_PASTR;
 	}
 
 	private void updateStrategicInfo() throws GameActionException {
@@ -135,6 +142,7 @@ public class BotHQ extends Bot {
 
 			case SCATTER:
 				directStrategyScatter();
+				break;
 
 			default:
 				System.out.println("Uh oh! Unknown strategy!");
@@ -143,56 +151,57 @@ public class BotHQ extends Bot {
 	}
 
 	private void directStrategyProxy() throws GameActionException {
-		MapLocation rally = null;
 		boolean beAggressive = false;
 		if (numEnemyPastrs == 0) {
 			if (proxyPastrBuildTriggered) {
-				rally = bestPastrLocations[0];
+				rallyLoc = bestPastrLocations[0];
 			} else {
-				rally = new MapLocation(rc.getMapWidth() / 2, rc.getMapHeight() / 2);
-				while (rc.senseTerrainTile(rally) == TerrainTile.VOID) {
-					rally = rally.add(rally.directionTo(ourHQ));
+				rallyLoc = new MapLocation(rc.getMapWidth() / 2, rc.getMapHeight() / 2);
+				while (rc.senseTerrainTile(rallyLoc) == TerrainTile.VOID) {
+					rallyLoc = rallyLoc.add(rallyLoc.directionTo(ourHQ));
 				}
 			}
 			beAggressive = true; // Need to punch through to our own pastr location
 		} else if (numEnemyPastrs == 1) {
-			rally = theirPastrs[0];
+			rallyLoc = theirPastrs[0];
 			beAggressive = Strategy.active == Strategy.PROXY_ATTACK; // Only try to destroy the enemy pastr if using PROXY_ATTACK
 		} else {
-			rally = chooseEnemyPastrAttackTarget();
+			rallyLoc = chooseEnemyPastrAttackTarget();
 			beAggressive = true; // They've overextended themselves, so try to destroy their pastrs
 		}
-		MessageBoard.RALLY_LOC.writeMapLocation(rally);
+		MessageBoard.RALLY_LOC.writeMapLocation(rallyLoc);
 		MessageBoard.BE_AGGRESSIVE.writeBoolean(beAggressive);
 
 		// Tell individual soldiers when to construct noise tower and pastr
-		if (numEnemyPastrs >= 1 || proxyPastrBuildTriggered || Clock.getRoundNum() > 1300) {
+		if (!proxyPastrBuildTriggered && (numEnemyPastrs >= 1 || Clock.getRoundNum() > 1300)) {
 			proxyPastrBuildTriggered = true;
-			MessageBoard.PROXY_PASTR_BUILD_TRIGGERED.writeBoolean(true);
+			computePastrScoresProxy();
+			computeBestPastrLocations();
+			broadcastBestPastrLocations();
 		}
-
 	}
+
 	private void directStrategyScatter() throws GameActionException {
 		rallyLoc = chooseEnemyPastrAttackTarget();
 		boolean beAggressive = false;
 		if (rallyLoc == null || rallyLoc.distanceSquaredTo(theirHQ) <= 5) {
 			int bestDistSq = 999999;
 			MapLocation soldierCenter = findSoldierCenterOfMass();
-			if(soldierCenter == null) soldierCenter = ourHQ;
+			if (soldierCenter == null) soldierCenter = ourHQ;
 			for (int i = 0; i < numPastrLocations; i++) {
 				MapLocation pastrLoc = bestPastrLocations[i];
 				int distSq = soldierCenter.distanceSquaredTo(pastrLoc);
 				if (distSq < bestDistSq) {
 					bestDistSq = distSq;
 					rallyLoc = pastrLoc;
-					beAggressive = true; //need to punch through to our pastr
+					beAggressive = true; // need to punch through to our pastr
 				}
 			}
 		}
 		MessageBoard.RALLY_LOC.writeMapLocation(rallyLoc);
 		MessageBoard.BE_AGGRESSIVE.writeBoolean(beAggressive);
 	}
-	
+
 	private void directStrategyOnePastr() throws GameActionException {
 		boolean desperation = false;
 
@@ -253,7 +262,6 @@ public class BotHQ extends Bot {
 		MessageBoard.RALLY_LOC.writeMapLocation(rallyLoc);
 	}
 
-
 	private boolean theyHavePastrOutsideHQ() {
 		for (int i = numEnemyPastrs; i-- > 0;) {
 			if (!theirPastrs[i].isAdjacentTo(theirHQ)) {
@@ -263,8 +271,6 @@ public class BotHQ extends Bot {
 		return false;
 	}
 
-
-	
 	private MapLocation findSoldierCenterOfMass() {
 		int x = 0;
 		int y = 0;

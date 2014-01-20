@@ -149,7 +149,7 @@ public class Nav {
 	}
 
 	private static boolean tryMoveBfs(MapLocation here) throws GameActionException {
-		Direction bfsDir = Bfs.readResult(here, dest, rc);
+		Direction bfsDir = Bfs.readResult(here, dest);
 
 		if (bfsDir == null) return false;
 
@@ -166,7 +166,7 @@ public class Nav {
 					// after deviating to get on a road:
 					MapLocation next = here.add(dir);
 					if (rc.senseTerrainTile(next) == TerrainTile.ROAD) {
-						Direction nextBfsDir = Bfs.readResult(next, dest, rc);
+						Direction nextBfsDir = Bfs.readResult(next, dest);
 						if (nextBfsDir != null) {
 							MapLocation nextNext = next.add(nextBfsDir);
 							if (!nextNext.isAdjacentTo(here)) {
@@ -212,6 +212,7 @@ public class Nav {
 		sneak = (theSneak == Sneak.YES);
 		engage = (theEngage == Engage.YES);
 		numEnemiesAttackingMoveDirs = theNumEnemiesAttackingMoveDirs;
+		haveCachedEntersLosingFightDecision = false;
 
 		if (!theDest.equals(dest)) {
 			dest = theDest;
@@ -263,7 +264,20 @@ public class Nav {
 		if (countingCenter == null) return false;
 		int numEnemies = Util.countNonConstructingSoldiers(rc.senseNearbyGameObjects(Robot.class, countingCenter, 30, rc.getTeam().opponent()), rc);
 		int numAllies = 1 + Util.countNonConstructingSoldiers(rc.senseNearbyGameObjects(Robot.class, countingCenter, 30, rc.getTeam()), rc);
-		boolean ret = numEnemies >= numAllies;
+		boolean ret;
+		switch (numEnemies) {
+			case 1:
+				ret = numAllies - numEnemies <= 0;
+				break;
+
+			case 2:
+				ret = numAllies - numEnemies <= 1;
+				break;
+
+			default:
+				ret = numAllies - numEnemies <= 2;
+				break;
+		}
 		Debug.indicate("losing", 1, "countingCenter = " + countingCenter.toString() + "; numEnemies = " + numEnemies + ", numAllies = " + numAllies);
 		haveCachedEntersLosingFightDecision = true;
 		cachedEntersLosingFightDecision = ret;

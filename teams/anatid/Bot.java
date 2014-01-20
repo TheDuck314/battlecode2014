@@ -18,6 +18,7 @@ public abstract class Bot {
 
 		FastRandom.init();
 		MessageBoard.init(theRC);
+		Bfs.init(theRC);
 	}
 
 	void updateData() {
