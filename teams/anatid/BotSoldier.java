@@ -17,7 +17,7 @@ public class BotSoldier extends Bot {
 
 	protected static void init(RobotController theRC) throws GameActionException {
 		Bot.init(theRC);
-		Debug.init(theRC, "bytecodes");
+		Debug.init(theRC, "selfdestruct");
 		Nav.init(theRC);
 
 		spawnOrder = MessageBoard.SPAWN_COUNT.readInt();
@@ -38,6 +38,7 @@ public class BotSoldier extends Bot {
 	static MapLocation here;
 	static RobotInfo[] visibleEnemies; // enemies within vision radius (35)
 	static RobotInfo[] attackableEnemies; // enemies within attack radius(10)
+	static int numAdjacentEnemies;
 	static int spawnOrder;
 
 	static int numPastrLocations = 0;
@@ -56,9 +57,11 @@ public class BotSoldier extends Bot {
 
 	private static void turn() throws GameActionException {
 		debug_init();
-		if (!rc.isActive()) return;
-
 		here = rc.getLocation();
+		updateEnemyData();
+		if (trySelfDestruct()) return;
+
+		if (!rc.isActive()) return;
 
 		if (Strategy.active == Strategy.UNDECIDED) {
 			Strategy.active = MessageBoard.STRATEGY.readStrategy();
@@ -74,18 +77,24 @@ public class BotSoldier extends Bot {
 			if (mercyKillPastrs()) return;
 		}
 
-		debug_bytecodes("after mercyKill");
-
-		updateEnemyData();
+		debug_bytecodes("after updateEnemyData");
 
 		if (visibleEnemies.length > 0 && rc.isActive()) {
 			doObligatoryMicro();
 			if (!rc.isActive()) {
+				debug_bytecodes("after obligatory micro (returning)");
 				return;
 			}
 		}
 
-		if (tryBuildSomething()) return;
+		debug_bytecodes("after obligatory micro");
+
+		if (tryBuildSomething()) {
+			debug_bytecodes("after tryBuild (returning)");
+			return;
+		}
+
+		debug_bytecodes("after tryBuild");
 
 		// Check if someone else has taken our job from us:
 		if (!isFirstTurn) {
@@ -98,19 +107,26 @@ public class BotSoldier extends Bot {
 		}
 		isFirstTurn = false;
 
+		debug_bytecodes("after assign check");
+
 		int destIndex = towerBuildAssignmentIndex;
 		if (destIndex == -1) destIndex = pastrBuildAssignmentIndex;
 		if (destIndex != -1) {
 			// Debug.indicate("assign", 1, "going to pastr build location " + destIndex);
 			Nav.goTo(bestPastrLocations[destIndex], Nav.Sneak.NO, Nav.Engage.YES, countNumEnemiesAttackingMoveDirs());
+			debug_bytecodes("after goTo build");
 			return;
 		}
 
 		MapLocation rallyLoc = MessageBoard.RALLY_LOC.readMapLocation();
+		debug_bytecodes("after rallyLoc read");
 		if (rallyLoc != null) {
 			if (weAreNearEnemyPastr()) {
-				if (tryToKillCows()) return;
+				if (tryToKillCows()) {
+					return;
+				}
 			}
+			debug_bytecodes("after nearEnemyPastr/killCows");
 			MapLocation[] ourPastrs = rc.sensePastrLocations(us);
 			Nav.Sneak sneak = Nav.Sneak.NO;
 			for (int i = 0; i < numPastrLocations; i++) {
@@ -119,12 +135,17 @@ public class BotSoldier extends Bot {
 					break;
 				}
 			}
+			debug_bytecodes("after sneak decide");
 			if (visibleEnemies.length > 0 && here.distanceSquaredTo(rallyLoc) <= 49) {
-				if (doVoluntaryDefensiveMicro(sneak)) return;
+				if (doVoluntaryDefensiveMicro(sneak)) {
+					debug_bytecodes("after voluntaryDefensive");
+					return;
+				}
 			}
 			Nav.Engage engage = here.distanceSquaredTo(rallyLoc) > 70 || MessageBoard.BE_AGGRESSIVE.readBoolean() ? Nav.Engage.YES : Nav.Engage.NO;
 			// Debug.indicate("action", 0, "naving to rally loc (engage = " + engage.toString() + ")");
 			Nav.goTo(rallyLoc, sneak, engage, countNumEnemiesAttackingMoveDirs());
+			debug_bytecodes("after goTo rally");
 		}
 	}
 
@@ -201,11 +222,7 @@ public class BotSoldier extends Bot {
 	}
 
 	private static void updateEnemyData() throws GameActionException {
-		debug_bytecodes("updateEnemyData start");
-
 		Robot[] visibleEnemyRobots = rc.senseNearbyGameObjects(Robot.class, RobotType.SOLDIER.sensorRadiusSquared, them);
-
-		debug_bytecodes("after senseNearby");
 
 		visibleEnemies = new RobotInfo[visibleEnemyRobots.length];
 		for (int i = visibleEnemyRobots.length; i-- > 0;) {
@@ -214,11 +231,23 @@ public class BotSoldier extends Bot {
 
 		Robot[] attackableEnemyRobots = rc.senseNearbyGameObjects(Robot.class, RobotType.SOLDIER.attackRadiusMaxSquared, them);
 		attackableEnemies = new RobotInfo[attackableEnemyRobots.length];
+		numAdjacentEnemies = 0;
 		for (int i = attackableEnemies.length; i-- > 0;) {
 			attackableEnemies[i] = rc.senseRobotInfo(attackableEnemyRobots[i]);
+			if (attackableEnemies[i].location.isAdjacentTo(here)) numAdjacentEnemies++;
 		}
+	}
 
-		debug_bytecodes("updateEnemyData end");
+	private static boolean trySelfDestruct() throws GameActionException {
+		if (numAdjacentEnemies > 0) {
+			int numAdjacentAllies = rc.senseNearbyGameObjects(Robot.class, here, 2, us).length;
+			Debug.indicate("selfdestruct", 0, "numAdjacentEnemies = " + numAdjacentEnemies + "; numAdjacentAllies = " + numAdjacentAllies);
+			if (numAdjacentEnemies > numAdjacentAllies) {
+				rc.selfDestruct();
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private static boolean doVoluntaryDefensiveMicro(Nav.Sneak sneak) throws GameActionException {
@@ -229,6 +258,48 @@ public class BotSoldier extends Bot {
 
 	// obligatory micro is attacks or movements that we have to do because either we or a nearby ally is in combat
 	private static boolean doObligatoryMicro() throws GameActionException {
+		if (visibleEnemies.length > 0) {
+			if (Clock.getRoundNum() > MessageBoard.SELF_DESTRUCT_LOCKOUT_ROUND.readInt()
+					|| rc.getRobot().getID() == MessageBoard.SELF_DESTRUCT_LOCKOUT_ID.readInt()) {
+				MapLocation closestEnemy = Util.closestNonConstructingSoldier(visibleEnemies, here);
+				if (closestEnemy != null) {
+					if (!here.isAdjacentTo(closestEnemy)) {
+						Direction dir1 = here.directionTo(closestEnemy);
+						if (rc.canMove(dir1)) {
+							boolean trySelfDestruct = true;
+							MapLocation pathLoc = here.add(dir1);
+							int numMoves = 1;
+							while (!pathLoc.isAdjacentTo(closestEnemy)) {
+								pathLoc = pathLoc.add(pathLoc.directionTo(closestEnemy));
+								numMoves++;
+								if (rc.senseTerrainTile(pathLoc) == TerrainTile.VOID
+										|| rc.senseNearbyGameObjects(Robot.class, pathLoc, 0, Team.NEUTRAL).length != 0) {
+									trySelfDestruct = false;
+									break;
+								}
+							}
+							if (trySelfDestruct) {
+								if (rc.senseTerrainTile(here) == TerrainTile.ROAD && numMoves > 1 && (!dir1.isDiagonal() || rc.getActionDelay() < 0.6)) numMoves--;
+								double requiredHealth = numMoves
+										* RobotType.SOLDIER.attackPower
+										* Util.countNonConstructingSoldiers(
+												rc.senseNearbyGameObjects(Robot.class, pathLoc, RobotType.SOLDIER.attackRadiusMaxSquared, them), rc);
+								if (rc.getHealth() > requiredHealth) {
+									int numTargetsHit = rc.senseNearbyGameObjects(Robot.class, pathLoc, 2, them).length;
+									if (numTargetsHit >= 3 || (here.isAdjacentTo(pathLoc) && numTargetsHit == 2)) {
+										rc.move(dir1);
+										MessageBoard.SELF_DESTRUCT_LOCKOUT_ROUND.writeInt(Clock.getRoundNum() + 10);
+										MessageBoard.SELF_DESTRUCT_LOCKOUT_ID.writeInt(rc.getRobot().getID());
+										return true;
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
 		int numSoldiersAttackingUs = Util.countNonConstructingSoldiers(attackableEnemies);
 		if (numSoldiersAttackingUs >= 1) {
 			// we are in combat
@@ -347,23 +418,24 @@ public class BotSoldier extends Bot {
 		return false;
 	}
 
+	// Costs ~1k bytecodes :(
 	private static boolean tryToKillCows() throws GameActionException {
 		MapLocation bestTarget = null;
-		double mostCows = -1;
+		double mostCows = 300;
 		MapLocation[] shootLocs = MapLocation.getAllMapLocationsWithinRadiusSq(here, RobotType.SOLDIER.attackRadiusMaxSquared);
-		for (int i = shootLocs.length; i-- > 0;) {
-			MapLocation target = shootLocs[i];
-			if (target.equals(here)) continue;
-			double cows = rc.senseCowsAtLocation(target);
-			if (cows > mostCows) {
-				if (numOtherAlliedSoldiersInRange(target, 1) == 0) {
+		debug_bytecodes("loop start");
+		for (int i = shootLocs.length; i-- > 0;) { // 4 per loop
+			double cows = rc.senseCowsAtLocation(shootLocs[i]); // 14
+			if (cows > mostCows) { // 4
+				MapLocation target = shootLocs[i];
+				if (target.equals(here)) continue;
+				if (cows > 3000 || rc.senseNearbyGameObjects(Robot.class, target, 0, us).length == 0) {
 					mostCows = cows;
 					bestTarget = target;
 				}
 			}
 		}
-		// Debug.indicate("micro", 2, "trying to kill cows: mostCows = " + mostCows + " at " + (bestTarget == null ? "null" : bestTarget.toString()));
-		if (mostCows > 300) {
+		if (bestTarget != null) {
 			rc.attackSquare(bestTarget);
 			return true;
 		} else {
@@ -477,10 +549,10 @@ public class BotSoldier extends Bot {
 
 		Direction dir = chooseRetreatDirection();
 		if (dir == null) { // Can't retreat! Fight!
-		// Debug.indicate("micro", 2, "couldn't retreat; fighting instead");
+			// Debug.indicate("micro", 2, "couldn't retreat; fighting instead");
 			attackANonConstructingSoldier();
 		} else { // Can retreat. Do it!
-		// Debug.indicate("micro", 2, "retreating successfully");
+			// Debug.indicate("micro", 2, "retreating successfully");
 			rc.move(dir);
 		}
 	}
