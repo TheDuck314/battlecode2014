@@ -7,7 +7,7 @@ public class Bfs {
 	private static int NUM_PAGES;
 	private static int PAGE_SIZE;
 	private static int MAP_HEIGHT;
-	private static final int MAX_PAGES = 10;
+	private static final int MAX_PAGES = 5;
 
 	private static RobotController rc;
 
@@ -181,18 +181,18 @@ public class Bfs {
 
 			int locX = loc.x;
 			int locY = loc.y;
-			for (int i = 8; i-- > 0;) { // 3 + 8*3 = 27
-				int x = locX + dirsX[i]; // 6
-				int y = locY + dirsY[i]; // 6
-				if (x > 0 && y > 0 && x < mapWidth && y < mapHeight && !wasQueued[x][y]) { // max 16
-					MapLocation newLoc = new MapLocation(x, y); // 6
-					if (rc.senseTerrainTile(newLoc) != TerrainTile.VOID /* 5 + 10 */&& (destInSpawn || !Util.inHQAttackRange(newLoc, enemyHQ)/* usually 22 */)) {
-						publishResult(page, newLoc, dest, dirs[i]); // 7 + publishResult
+			for (int i = 8; i-- > 0;) {
+				int x = locX + dirsX[i]; 
+				int y = locY + dirsY[i]; 
+				if (x > 0 && y > 0 && x < mapWidth && y < mapHeight && !wasQueued[x][y]) {
+					MapLocation newLoc = new MapLocation(x, y);
+					if (rc.senseTerrainTile(newLoc) != TerrainTile.VOID && (destInSpawn || !Bot.isInTheirHQAttackRange(newLoc))) {
+						publishResult(page, newLoc, dest, dirs[i]);
 
 						// push newLoc onto queue
-						locQueue[locQueueTail] = newLoc; // 4
-						locQueueTail++; // 4
-						wasQueued[x][y] = true; // 6
+						locQueue[locQueueTail] = newLoc;
+						locQueueTail++;
+						wasQueued[x][y] = true;
 					}
 				}
 			}

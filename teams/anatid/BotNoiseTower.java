@@ -98,7 +98,7 @@ public class BotNoiseTower extends Bot {
 		while (edgeTrimIndex >= 0) {
 			MapLocation edge = new MapLocation(pastr.x + edgesX[edgeTrimIndex], pastr.y + edgesY[edgeTrimIndex]);
 			edgeTrimIndex--;
-			if (Util.isOnMap(edge, rc) && rc.canSenseSquare(edge) && rc.senseCowsAtLocation(edge) > 1000) {
+			if (isOnMap(edge) && rc.canSenseSquare(edge) && rc.senseCowsAtLocation(edge) > 1000) {
 				MapLocation targetSquare = edge.add(pastr.directionTo(edge));
 				if (rc.canAttackSquare(targetSquare)) {
 					rc.attackSquareLight(targetSquare);
@@ -107,7 +107,7 @@ public class BotNoiseTower extends Bot {
 			}
 		}
 
-		while (!rc.canAttackSquare(smart2Loc) || !Util.isOnMap(smart2Loc, rc)) {
+		while (!rc.canAttackSquare(smart2Loc) || !isOnMap(smart2Loc)) {
 			Direction moveDir = smart2Loc.directionTo(pastr);
 			Direction computedMoveDir = HerdPattern.readHerdDir(smart2Loc, rc);
 			if (computedMoveDir != null) moveDir = computedMoveDir;

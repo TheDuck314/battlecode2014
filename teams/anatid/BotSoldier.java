@@ -17,7 +17,7 @@ public class BotSoldier extends Bot {
 
 	protected static void init(RobotController theRC) throws GameActionException {
 		Bot.init(theRC);
-		Debug.init(theRC, "selfdestruct");
+		Debug.init(theRC, "micro");
 		Nav.init(theRC);
 
 		spawnOrder = MessageBoard.SPAWN_COUNT.readInt();
@@ -38,7 +38,10 @@ public class BotSoldier extends Bot {
 	static MapLocation here;
 	static RobotInfo[] visibleEnemies; // enemies within vision radius (35)
 	static RobotInfo[] attackableEnemies; // enemies within attack radius(10)
-	static int numAdjacentEnemies;
+	static int numNonConstructingSoldiersAttackingUs;
+	static int[] cachedNumEnemiesAttackingMoveDirs; // computed in doObligatoryMicro
+	static boolean fightIsWinning;
+
 	static int spawnOrder;
 
 	static int numPastrLocations = 0;
@@ -47,19 +50,9 @@ public class BotSoldier extends Bot {
 	static int pastrBuildAssignmentIndex = -1;
 	static boolean isFirstTurn = true;
 
-	static void debug_init() {
-		Debug.indicate("bytecodes", 0, "");
-	}
-
-	static void debug_bytecodes(String message) {
-		Debug.indicateAppend("bytecodes", 0, message + ": " + Clock.getBytecodeNum() + "; ");
-	}
-
 	private static void turn() throws GameActionException {
-		debug_init();
+		Debug.debug_bytecodes_init();
 		here = rc.getLocation();
-		updateEnemyData();
-		if (trySelfDestruct()) return;
 
 		if (!rc.isActive()) return;
 
@@ -77,24 +70,20 @@ public class BotSoldier extends Bot {
 			if (mercyKillPastrs()) return;
 		}
 
-		debug_bytecodes("after updateEnemyData");
+		updateEnemyData();
 
 		if (visibleEnemies.length > 0 && rc.isActive()) {
 			doObligatoryMicro();
 			if (!rc.isActive()) {
-				debug_bytecodes("after obligatory micro (returning)");
+				Debug.debug_bytecodes("after obligatory micro (returning)");
 				return;
 			}
 		}
 
-		debug_bytecodes("after obligatory micro");
-
 		if (tryBuildSomething()) {
-			debug_bytecodes("after tryBuild (returning)");
+			Debug.debug_bytecodes("after tryBuild (returning)");
 			return;
 		}
-
-		debug_bytecodes("after tryBuild");
 
 		// Check if someone else has taken our job from us:
 		if (!isFirstTurn) {
@@ -107,27 +96,21 @@ public class BotSoldier extends Bot {
 		}
 		isFirstTurn = false;
 
-		debug_bytecodes("after assign check");
-
 		int destIndex = towerBuildAssignmentIndex;
 		if (destIndex == -1) destIndex = pastrBuildAssignmentIndex;
 		if (destIndex != -1) {
 			// Debug.indicate("assign", 1, "going to pastr build location " + destIndex);
-			Nav.goTo(bestPastrLocations[destIndex], Nav.Sneak.NO, Nav.Engage.YES, countNumEnemiesAttackingMoveDirs());
-			debug_bytecodes("after goTo build");
+			Nav.goTo(bestPastrLocations[destIndex], Nav.Sneak.NO, fightIsWinning ? Nav.Engage.YES : Nav.Engage.NO, countNumEnemiesAttackingMoveDirs());
 			return;
 		}
 
 		MapLocation rallyLoc = MessageBoard.RALLY_LOC.readMapLocation();
-		debug_bytecodes("after rallyLoc read");
 		if (rallyLoc != null) {
 			if (weAreNearEnemyPastr()) {
 				if (tryToKillCows()) {
 					return;
 				}
 			}
-			debug_bytecodes("after nearEnemyPastr/killCows");
-			MapLocation[] ourPastrs = rc.sensePastrLocations(us);
 			Nav.Sneak sneak = Nav.Sneak.NO;
 			for (int i = 0; i < numPastrLocations; i++) {
 				if (here.distanceSquaredTo(bestPastrLocations[i]) <= 49) {
@@ -135,17 +118,16 @@ public class BotSoldier extends Bot {
 					break;
 				}
 			}
-			debug_bytecodes("after sneak decide");
 			if (visibleEnemies.length > 0 && here.distanceSquaredTo(rallyLoc) <= 49) {
 				if (doVoluntaryDefensiveMicro(sneak)) {
-					debug_bytecodes("after voluntaryDefensive");
 					return;
 				}
 			}
-			Nav.Engage engage = here.distanceSquaredTo(rallyLoc) > 70 || MessageBoard.BE_AGGRESSIVE.readBoolean() ? Nav.Engage.YES : Nav.Engage.NO;
+			Nav.Engage engage = fightIsWinning ? Nav.Engage.YES : Nav.Engage.NO;
 			// Debug.indicate("action", 0, "naving to rally loc (engage = " + engage.toString() + ")");
+			Debug.debug_bytecodes("before goTo rally");
 			Nav.goTo(rallyLoc, sneak, engage, countNumEnemiesAttackingMoveDirs());
-			debug_bytecodes("after goTo rally");
+			Debug.debug_bytecodes("after goTo rally");
 		}
 	}
 
@@ -225,29 +207,44 @@ public class BotSoldier extends Bot {
 		Robot[] visibleEnemyRobots = rc.senseNearbyGameObjects(Robot.class, RobotType.SOLDIER.sensorRadiusSquared, them);
 
 		visibleEnemies = new RobotInfo[visibleEnemyRobots.length];
+		int numVisibleNonConstructingEnemySoldiers = 0;
 		for (int i = visibleEnemyRobots.length; i-- > 0;) {
 			visibleEnemies[i] = rc.senseRobotInfo(visibleEnemyRobots[i]);
+			if(visibleEnemies[i].type == RobotType.SOLDIER && !visibleEnemies[i].isConstructing) numVisibleNonConstructingEnemySoldiers++;
 		}
 
-		Robot[] attackableEnemyRobots = rc.senseNearbyGameObjects(Robot.class, RobotType.SOLDIER.attackRadiusMaxSquared, them);
-		attackableEnemies = new RobotInfo[attackableEnemyRobots.length];
-		numAdjacentEnemies = 0;
-		for (int i = attackableEnemies.length; i-- > 0;) {
-			attackableEnemies[i] = rc.senseRobotInfo(attackableEnemyRobots[i]);
-			if (attackableEnemies[i].location.isAdjacentTo(here)) numAdjacentEnemies++;
-		}
-	}
-
-	private static boolean trySelfDestruct() throws GameActionException {
-		if (numAdjacentEnemies > 0) {
-			int numAdjacentAllies = rc.senseNearbyGameObjects(Robot.class, here, 2, us).length;
-			Debug.indicate("selfdestruct", 0, "numAdjacentEnemies = " + numAdjacentEnemies + "; numAdjacentAllies = " + numAdjacentAllies);
-			if (numAdjacentEnemies > numAdjacentAllies) {
-				rc.selfDestruct();
-				return true;
+		numNonConstructingSoldiersAttackingUs = 0;
+		if (visibleEnemies.length > 0) {
+			Robot[] attackableEnemyRobots = rc.senseNearbyGameObjects(Robot.class, RobotType.SOLDIER.attackRadiusMaxSquared, them);
+			attackableEnemies = new RobotInfo[attackableEnemyRobots.length];
+			for (int i = attackableEnemies.length; i-- > 0;) {
+				RobotInfo info = rc.senseRobotInfo(attackableEnemyRobots[i]);
+				attackableEnemies[i] = info;
+				if (info.type == RobotType.SOLDIER && !info.isConstructing) numNonConstructingSoldiersAttackingUs++;
 			}
+		} else {
+			attackableEnemies = new RobotInfo[0];
 		}
-		return false;
+
+		// clear the cached value of this array at the beginning of each turn:
+		cachedNumEnemiesAttackingMoveDirs = null;
+		switch(numVisibleNonConstructingEnemySoldiers) {
+			case 0:
+				fightIsWinning = true;
+				break;
+			case 1:
+				fightIsWinning = rc.senseNearbyGameObjects(Robot.class, here, 35, us).length >= 2;
+				break;
+			case 2:
+				fightIsWinning = rc.senseNearbyGameObjects(Robot.class, here, 35, us).length >= 4;
+				break;
+			case 3:
+				fightIsWinning = rc.senseNearbyGameObjects(Robot.class, here, 35, us).length >= 5;
+				break;
+			default:
+				fightIsWinning = rc.senseNearbyGameObjects(Robot.class, here, 35, us).length >= (int)(1.5 * numVisibleNonConstructingEnemySoldiers);
+				break;
+		}
 	}
 
 	private static boolean doVoluntaryDefensiveMicro(Nav.Sneak sneak) throws GameActionException {
@@ -258,50 +255,7 @@ public class BotSoldier extends Bot {
 
 	// obligatory micro is attacks or movements that we have to do because either we or a nearby ally is in combat
 	private static boolean doObligatoryMicro() throws GameActionException {
-		if (visibleEnemies.length > 0) {
-			if (Clock.getRoundNum() > MessageBoard.SELF_DESTRUCT_LOCKOUT_ROUND.readInt()
-					|| rc.getRobot().getID() == MessageBoard.SELF_DESTRUCT_LOCKOUT_ID.readInt()) {
-				MapLocation closestEnemy = Util.closestNonConstructingSoldier(visibleEnemies, here);
-				if (closestEnemy != null) {
-					if (!here.isAdjacentTo(closestEnemy)) {
-						Direction dir1 = here.directionTo(closestEnemy);
-						if (rc.canMove(dir1)) {
-							boolean trySelfDestruct = true;
-							MapLocation pathLoc = here.add(dir1);
-							int numMoves = 1;
-							while (!pathLoc.isAdjacentTo(closestEnemy)) {
-								pathLoc = pathLoc.add(pathLoc.directionTo(closestEnemy));
-								numMoves++;
-								if (rc.senseTerrainTile(pathLoc) == TerrainTile.VOID
-										|| rc.senseNearbyGameObjects(Robot.class, pathLoc, 0, Team.NEUTRAL).length != 0) {
-									trySelfDestruct = false;
-									break;
-								}
-							}
-							if (trySelfDestruct) {
-								if (rc.senseTerrainTile(here) == TerrainTile.ROAD && numMoves > 1 && (!dir1.isDiagonal() || rc.getActionDelay() < 0.6)) numMoves--;
-								double requiredHealth = numMoves
-										* RobotType.SOLDIER.attackPower
-										* Util.countNonConstructingSoldiers(
-												rc.senseNearbyGameObjects(Robot.class, pathLoc, RobotType.SOLDIER.attackRadiusMaxSquared, them), rc);
-								if (rc.getHealth() > requiredHealth) {
-									int numTargetsHit = rc.senseNearbyGameObjects(Robot.class, pathLoc, 2, them).length;
-									if (numTargetsHit >= 3 || (here.isAdjacentTo(pathLoc) && numTargetsHit == 2)) {
-										rc.move(dir1);
-										MessageBoard.SELF_DESTRUCT_LOCKOUT_ROUND.writeInt(Clock.getRoundNum() + 10);
-										MessageBoard.SELF_DESTRUCT_LOCKOUT_ID.writeInt(rc.getRobot().getID());
-										return true;
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-
-		int numSoldiersAttackingUs = Util.countNonConstructingSoldiers(attackableEnemies);
-		if (numSoldiersAttackingUs >= 1) {
+		if (numNonConstructingSoldiersAttackingUs >= 1) {
 			// we are in combat
 			// If we are getting double-teamed worse than any of the enemies we are fighting, try to retreat
 			int maxAlliesAttackingEnemy = 0;
@@ -311,11 +265,11 @@ public class BotSoldier extends Bot {
 				int numAlliesAttackingEnemy = 1 + numOtherAlliedSoldiersAndBuildingsInAttackRange(attackableEnemies[i].location);
 				if (numAlliesAttackingEnemy > maxAlliesAttackingEnemy) maxAlliesAttackingEnemy = numAlliesAttackingEnemy;
 			}
-			if (numSoldiersAttackingUs == 1) {
+			if (numNonConstructingSoldiersAttackingUs == 1) {
 				if (maxAlliesAttackingEnemy == 1) {
 					// we are in a 1v1. fight if we are winning, otherwise retreat
 					RobotInfo singleEnemy = Util.findANonConstructingSoldier(attackableEnemies);
-					if (rc.getHealth() >= singleEnemy.health) {
+					if (rc.getHealth() >= singleEnemy.health || fightIsWinning) {
 						attackAndRecord(singleEnemy);
 					} else {
 						retreatOrFight();
@@ -325,7 +279,7 @@ public class BotSoldier extends Bot {
 					RobotInfo singleEnemy = Util.findANonConstructingSoldier(attackableEnemies);
 					attackAndRecord(singleEnemy);
 				}
-			} else if (numSoldiersAttackingUs > maxAlliesAttackingEnemy) {
+			} else if (!fightIsWinning && numNonConstructingSoldiersAttackingUs > maxAlliesAttackingEnemy) {
 				// We are getting doubled teamed too badly.
 				retreatOrFight();
 			} else {
@@ -346,7 +300,8 @@ public class BotSoldier extends Bot {
 				int numAlliesFighting = numOtherAlliedSoldiersAndBuildingsInAttackRange(closestEnemySoldier);
 				if (numAlliesFighting > 0) {
 					// Approach this enemy if doing so would expose us to at most numAlliesFighting enemies.
-					if (tryMoveTowardLocationWithMaxEnemyExposure(closestEnemySoldier, numAlliesFighting, Nav.Sneak.NO)) {
+					int maxEnemyExposure =  numAlliesFighting + 1;
+					if (tryMoveTowardLocationWithMaxEnemyExposure(closestEnemySoldier, maxEnemyExposure, Nav.Sneak.NO)) {
 						// Debug.indicate("micro", 0, "moving to support allies fighting closest enemy (max enemy exposure = " + numAlliesFighting + ")");
 						return true;
 					}
@@ -385,7 +340,7 @@ public class BotSoldier extends Bot {
 				while (pathLoc.distanceSquaredTo(enemyLocation) > RobotType.SOLDIER.attackRadiusMaxSquared) {
 					pathLoc = pathLoc.add(pathLoc.directionTo(enemyLocation));
 					if (rc.senseTerrainTile(pathLoc) == TerrainTile.VOID) continue visibleEnemyLoop;
-					if (Util.inHQAttackRange(pathLoc, theirHQ)) continue visibleEnemyLoop;
+					if (isInTheirHQAttackRange(pathLoc)) continue visibleEnemyLoop;
 					Robot[] enemyRobotsAlongPath = rc.senseNearbyGameObjects(Robot.class, pathLoc, RobotType.SOLDIER.attackRadiusMaxSquared, them);
 					if (Util.containsNonConstructingSoldier(enemyRobotsAlongPath, rc)) continue visibleEnemyLoop;
 				}
@@ -407,7 +362,7 @@ public class BotSoldier extends Bot {
 			Direction tryDir = tryDirs[i];
 			if (!rc.canMove(tryDir)) continue;
 			if (numEnemiesAttackingDirs[tryDir.ordinal()] > maxEnemyExposure) continue;
-			if (Util.inHQAttackRange(here.add(tryDir), theirHQ)) continue;
+			if (isInTheirHQAttackRange(here.add(tryDir))) continue;
 			// Debug.indicate("micro", 1, String.format("moving toward %s with max enemy exposure %d (actual exposure %d)", dest.toString(), maxEnemyExposure,
 			// numEnemiesAttackingDirs[tryDir.ordinal()]));
 			if (sneak == Nav.Sneak.YES) rc.move(tryDir);
@@ -423,7 +378,6 @@ public class BotSoldier extends Bot {
 		MapLocation bestTarget = null;
 		double mostCows = 300;
 		MapLocation[] shootLocs = MapLocation.getAllMapLocationsWithinRadiusSq(here, RobotType.SOLDIER.attackRadiusMaxSquared);
-		debug_bytecodes("loop start");
 		for (int i = shootLocs.length; i-- > 0;) { // 4 per loop
 			double cows = rc.senseCowsAtLocation(shootLocs[i]); // 14
 			if (cows > mostCows) { // 4
@@ -601,6 +555,9 @@ public class BotSoldier extends Bot {
    	// @formatter:on
 
 	private static int[] countNumEnemiesAttackingMoveDirs() {
+		if(cachedNumEnemiesAttackingMoveDirs != null) return cachedNumEnemiesAttackingMoveDirs;
+		
+		Debug.debug_bytecodes("before countAttackingDirs");
 		int[] numEnemiesAttackingDir = new int[8];
 		for (int i = visibleEnemies.length; i-- > 0;) {
 			RobotInfo info = visibleEnemies[i];
@@ -612,6 +569,8 @@ public class BotSoldier extends Bot {
 				}
 			}
 		}
+		Debug.debug_bytecodes("after countAttackingDirs");
+		cachedNumEnemiesAttackingMoveDirs = numEnemiesAttackingDir;
 		return numEnemiesAttackingDir;
 	}
 
@@ -652,7 +611,7 @@ public class BotSoldier extends Bot {
 			Direction tryDir = Direction.values()[(retreatDir.ordinal() + tryDirs[i] + 8) % 8];
 			if (!rc.canMove(tryDir)) continue;
 			MapLocation tryLoc = here.add(tryDir);
-			if (Util.inHQAttackRange(tryLoc, theirHQ)) continue;
+			if (isInTheirHQAttackRange(tryLoc)) continue;
 
 			int minEnemyDistSq = 999999;
 			for (int j = visibleEnemies.length; j-- > 0;) {

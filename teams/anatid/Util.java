@@ -155,16 +155,4 @@ public class Util {
 	public static Direction opposite(Direction dir) {
 		return Direction.values()[(dir.ordinal() + 4) % 8];
 	}
-
-	public static boolean inHQAttackRange(MapLocation loc, MapLocation hq) {
-		int distSq = hq.distanceSquaredTo(loc);
-		if (distSq < 25) return true;
-		else if (distSq > 25) return false;
-		else return (loc.x != hq.x) && (loc.y != hq.y);
-	}
-
-	public static boolean isOnMap(MapLocation loc, RobotController rc) {
-		return loc.x >= 0 && loc.y >= 0 && loc.x < rc.getMapWidth() && loc.y < rc.getMapHeight();
-	}
-
 }

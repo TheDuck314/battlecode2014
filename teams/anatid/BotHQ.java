@@ -21,7 +21,7 @@ public class BotHQ extends Bot {
 		cowGrowth = rc.senseCowGrowth();
 		MessageBoard.setDefaultChannelValues();
 	}
-	
+
 	// Strategic info
 	static int virtualSpawnCountdown = 0;
 	static int maxEnemySpawns;
@@ -321,8 +321,6 @@ public class BotHQ extends Bot {
 
 	// TODO: this takes a little too long on big maps
 	private static void computePastrScoresNonProxy() {
-		int mapWidth = rc.getMapWidth();
-		int mapHeight = rc.getMapHeight();
 		double mapSize = Math.hypot(mapWidth, mapHeight);
 		MapLocation mapCenter = new MapLocation(mapWidth / 2, mapHeight / 2);
 
@@ -362,8 +360,6 @@ public class BotHQ extends Bot {
 
 	// TODO: this takes a little too long on big maps
 	private static void computePastrScoresProxy() {
-		int mapWidth = rc.getMapWidth();
-		int mapHeight = rc.getMapHeight();
 		double mapSize = Math.hypot(mapWidth, mapHeight);
 
 		boolean theyHavePastr = theirPastrs.length > 0;
@@ -412,8 +408,6 @@ public class BotHQ extends Bot {
 		MapLocation bestPastrLocation = null;
 		double bestPastrScore = -999;
 
-		int mapWidth = rc.getMapWidth();
-		int mapHeight = rc.getMapHeight();
 		for (int x = 2; x < mapWidth - 2; x += 5) {
 			for (int y = 2; y < mapHeight - 2; y += 5) {
 				if (computedPastrScores[x][y] > bestPastrScore) {
@@ -439,7 +433,7 @@ public class BotHQ extends Bot {
 		for (int i = enemies.length; i-- > 0;) {
 			RobotInfo info = rc.senseRobotInfo(enemies[i]);
 			MapLocation enemyLoc = info.location;
-			if (!Util.inHQAttackRange(enemyLoc, ourHQ)) continue;
+			if (!isInOurHQAttackRange(enemyLoc)) continue;
 
 			int distSq = ourHQ.distanceSquaredTo(enemyLoc);
 			MapLocation target = enemyLoc;

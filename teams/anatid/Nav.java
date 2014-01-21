@@ -33,18 +33,19 @@ public class Nav {
 	private static boolean tryMoveDirect() throws GameActionException {
 		MapLocation here = rc.getLocation();
 		Direction toDest = here.directionTo(dest);
-		int bestScore = 0;
 		Direction bestDir = null;
 		Direction[] dirs = new Direction[] { toDest, toDest.rotateLeft(), toDest.rotateRight() };
 		for (Direction dir : dirs) {
+			if (bestDir != null) {
+				if (rc.senseTerrainTile(here.add(dir)) != TerrainTile.ROAD) continue; // only bother with suboptimal directions if they have roads
+			}
 			if (canMoveSafely(dir)) {
 				if (moveIsAllowedByEngagementRules(dir)) {
-					boolean road = rc.senseTerrainTile(here.add(dir)) == TerrainTile.ROAD;
-					int score = road ? 2 : 1;
-					if (score > bestScore) {
-						bestScore = score;
-						bestDir = dir;
+					if (rc.senseTerrainTile(here.add(dir)) == TerrainTile.ROAD) { // if we found a road, go there immediately
+						move(dir);
+						return true;
 					}
+					bestDir = dir;
 				}
 			}
 		}
@@ -118,7 +119,9 @@ public class Nav {
 		if (detectBugIntoEdge()) {
 			reverseBugWallFollowDir();
 		}
+		Debug.debug_bytecodes("after detectBugIntoEdge");
 		Direction dir = findBugMoveDir();
+		Debug.debug_bytecodes("after findBugMoveDir");
 		if (dir != null) {
 			bugMove(dir);
 		}
@@ -129,59 +132,67 @@ public class Nav {
 	}
 
 	private static void bugTo(MapLocation theDest) throws GameActionException {
+		Debug.debug_bytecodes("bugTo start");
+
 		// Check if we can stop bugging at the *beginning* of the turn
-		if (bugState == BugState.BUG && canEndBug()) {
-			bugState = BugState.DIRECT;
+		if (bugState == BugState.BUG) {
+			if (canEndBug()) {
+				Debug.debug_bytecodes("b");
+				bugState = BugState.DIRECT;
+			}
 		}
 
 		// If DIRECT mode, try to go directly to target
 		if (bugState == BugState.DIRECT) {
 			if (!tryMoveDirect()) {
+				Debug.debug_bytecodes("c (direct failed)");
 				bugState = BugState.BUG;
 				startBug();
+			} else {
+				Debug.debug_bytecodes("c (direct succeeded)");
 			}
 		}
 
 		// If that failed, or if bugging, bug
 		if (bugState == BugState.BUG) {
+			Debug.debug_bytecodes("bugTurn start");
 			bugTurn();
 		}
+		Debug.debug_bytecodes("bugTo end");
 	}
 
 	private static boolean tryMoveBfs(MapLocation here) throws GameActionException {
+		Debug.debug_bytecodes("tryMoveBfs a");
 		Direction bfsDir = Bfs.readResult(here, dest);
+		Debug.debug_bytecodes("b");
 
 		if (bfsDir == null) return false;
 
 		Direction[] dirs = new Direction[] { bfsDir, bfsDir.rotateLeft(), bfsDir.rotateRight() };
-		int bestScore = 0;
 		Direction bestDir = null;
+		Debug.debug_bytecodes("c");
 		for (int i = 0; i < dirs.length; i++) {
+			if (bestDir != null) {
+				// Only consider suboptimal directions if they have roads
+				if (rc.senseTerrainTile(here.add(dirs[i])) != TerrainTile.ROAD) continue;
+			}
+			Debug.debug_bytecodes("d");
 			Direction dir = dirs[i];
 			if (canMoveSafely(dir)) {
+				Debug.debug_bytecodes("e");
 				if (moveIsAllowedByEngagementRules(dir)) {
-					int score = (i == 0 ? 2 : 1);
-
-					// Give a big score for ending on a road, but only if the BFS doesn't tell us to backtrack
-					// after deviating to get on a road:
-					MapLocation next = here.add(dir);
-					if (rc.senseTerrainTile(next) == TerrainTile.ROAD) {
-						Direction nextBfsDir = Bfs.readResult(next, dest);
-						if (nextBfsDir != null) {
-							MapLocation nextNext = next.add(nextBfsDir);
-							if (!nextNext.isAdjacentTo(here)) {
-								score += 10;
-							}
-						}
+					Debug.debug_bytecodes("f");
+					if (rc.senseTerrainTile(here.add(dir)) == TerrainTile.ROAD) { // then this direction has a road; go this way
+						move(dir);
+						Debug.debug_bytecodes("tryMoveBfs end (road)");
+						return true;
 					}
-
-					if (score > bestScore) {
-						bestScore = score;
-						bestDir = dir;
-					}
+					bestDir = dir;
 				}
 			}
 		}
+
+		Debug.debug_bytecodes("tryMoveBfs end");
 
 		if (bestDir != null) {
 			move(bestDir);
@@ -207,7 +218,7 @@ public class Nav {
 	}
 
 	public static void goTo(MapLocation theDest, Sneak theSneak, Engage theEngage, int[] theNumEnemiesAttackingMoveDirs) throws GameActionException {
-//		Debug.indicate("nav", 1, "goTo " + theDest.toString());
+		// Debug.indicate("nav", 1, "goTo " + theDest.toString());
 
 		sneak = (theSneak == Sneak.YES);
 		engage = (theEngage == Engage.YES);
@@ -226,11 +237,11 @@ public class Nav {
 		if (!rc.isActive()) return;
 
 		if (tryMoveBfs(here)) {
-//			Debug.indicate("nav", 0, "using bfs");
+			// Debug.indicate("nav", 0, "using bfs");
 			return;
 		}
 
-//		Debug.indicate("nav", 0, "using bug");
+		// Debug.indicate("nav", 0, "using bug");
 		bugTo(dest);
 	}
 
@@ -240,47 +251,11 @@ public class Nav {
 	}
 
 	private static boolean canMoveSafely(Direction dir) {
-		return rc.canMove(dir) && !Util.inHQAttackRange(rc.getLocation().add(dir), enemyHQ);
+		return rc.canMove(dir) && !Bot.isInTheirHQAttackRange(rc.getLocation().add(dir));
 	}
 
 	private static boolean moveIsAllowedByEngagementRules(Direction dir) throws GameActionException {
-		if (engage) return !moveEntersLosingFight(dir);
-		else return !moveEntersFight(dir);
-	}
-
-	private static boolean moveEntersFight(Direction dir) throws GameActionException {
-		return numEnemiesAttackingMoveDirs[dir.ordinal()] > 0;
-	}
-
-	private static boolean moveEntersLosingFight(Direction dir) throws GameActionException {
-		if (!moveEntersFight(dir)) return false;
-		// This function is expensive, so the first time we call it for any direction, we cache the result for the rest of
-		// the turn so that we don't have to redo the analysis
-		if (haveCachedEntersLosingFightDecision) return cachedEntersLosingFightDecision;
-
-		MapLocation moveDest = rc.getLocation().add(dir);
-		Robot[] engagedUnits = rc.senseNearbyGameObjects(Robot.class, moveDest, RobotType.SOLDIER.attackRadiusMaxSquared, rc.getTeam().opponent());
-		MapLocation countingCenter = Util.closestNonConstructingSoldier(engagedUnits, moveDest, rc);
-		if (countingCenter == null) return false;
-		int numEnemies = Util.countNonConstructingSoldiers(rc.senseNearbyGameObjects(Robot.class, countingCenter, 30, rc.getTeam().opponent()), rc);
-		int numAllies = 1 + Util.countNonConstructingSoldiers(rc.senseNearbyGameObjects(Robot.class, countingCenter, 30, rc.getTeam()), rc);
-		boolean ret;
-		switch (numEnemies) {
-			case 1:
-				ret = numAllies - numEnemies <= 0;
-				break;
-
-			case 2:
-				ret = numAllies - numEnemies <= 1;
-				break;
-
-			default:
-				ret = numAllies - numEnemies <= 2;
-				break;
-		}
-//		Debug.indicate("losing", 1, "countingCenter = " + countingCenter.toString() + "; numEnemies = " + numEnemies + ", numAllies = " + numAllies);
-		haveCachedEntersLosingFightDecision = true;
-		cachedEntersLosingFightDecision = ret;
-		return ret;
+		if (engage) return true;
+		else return numEnemiesAttackingMoveDirs[dir.ordinal()] == 0;
 	}
 }

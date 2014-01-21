@@ -7,6 +7,11 @@ jianty_ = Armada
 slumerville = DoYouEvenMilk
 tfk1 = quotes
 
+team104 - The Simple Soldier
+   1/20: they are rushing (rallying to center and then attacking my pastr). This was quite effective against my
+         anatid19_noisepastr_stonewall, in part because of quite good selfdestruct micro. The other aspects of
+         their micro aren't as good but self-destruct seems very powerful.
+
 team160 - 0xg
    1/19: eventually (sometimes) builds a pastr and then tries to defend it with a phalanx of
          8 soldiers in the adjacent squares. Doesn't seem to build a noise tower. The defense isn't
@@ -21,8 +26,10 @@ team121 - Team 7
    1/18: they're rushing currently, it seems
 
 team052 - The Vegan Police
+   1/18: imitating proxy's sprint strategy I think. Their micro is better than anatid19_noisepastr_stonewall's, perhaps because
+         they use self-destructs effectively
    1/12: dangerous: beat my hq pastr strat with a better hq pastr implementation.
-         on bakedpotato his herding was better. on divide got better map control
+         on bakedpotato their herding was better. on divide got better map control
          since my guys always retreat, and built a second pastr
 
 team009 - Noob Status
