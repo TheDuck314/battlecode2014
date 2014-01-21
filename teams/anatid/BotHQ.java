@@ -101,7 +101,8 @@ public class BotHQ extends Bot {
 		// return Strategy.ONE_PASTR;
 		// return Strategy.ONE_PASTR_SUPPRESSOR;
 		// return Strategy.SCATTER;
-		return Strategy.SCATTER_SUPPRESSOR;
+		// return Strategy.SCATTER_SUPPRESSOR;
+		return Strategy.RUSH;
 	}
 
 	private static void updateStrategicInfo() throws GameActionException {
@@ -171,6 +172,10 @@ public class BotHQ extends Bot {
 			case SCATTER:
 			case SCATTER_SUPPRESSOR:
 				directStrategyScatter();
+				break;
+
+			case RUSH:
+				directStrategyRush();
 				break;
 
 			default:
@@ -297,6 +302,19 @@ public class BotHQ extends Bot {
 			rallyLoc = bestPastrLocations[0];
 		}
 		MessageBoard.RALLY_LOC.writeMapLocation(rallyLoc);
+	}
+
+	private static void directStrategyRush() throws GameActionException {
+		if (numEnemyPastrs == 0) {
+			rallyLoc = new MapLocation(rc.getMapWidth() / 2, rc.getMapHeight() / 2);
+			while (rc.senseTerrainTile(rallyLoc) == TerrainTile.VOID) {
+				rallyLoc = rallyLoc.add(rallyLoc.directionTo(ourHQ));
+			}
+		} else {
+			rallyLoc = chooseEnemyPastrAttackTarget();
+		}
+		MessageBoard.RALLY_LOC.writeMapLocation(rallyLoc);
+		MessageBoard.BE_AGGRESSIVE.writeBoolean(true);
 	}
 
 	private static void directSingleSuppressor() throws GameActionException {

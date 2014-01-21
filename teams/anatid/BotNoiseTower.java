@@ -74,11 +74,16 @@ public class BotNoiseTower extends Bot {
 						return;
 					}
 				}
+			} else {
+				if (suppressionTarget != null && rc.canAttackSquare(suppressionTarget)) {
+					rc.attackSquare(suppressionTarget);
+					return;
+				}
 			}
 		}
 
 		pastr = findNearestAlliedPastr();
-		if (pastr == null || here.distanceSquaredTo(pastr) > RobotType.NOISETOWER.attackRadiusMaxSquared) {
+		if (pastr == null || here.distanceSquaredTo(pastr) > 2 * RobotType.NOISETOWER.attackRadiusMaxSquared) {
 			pastr = here;
 		}
 

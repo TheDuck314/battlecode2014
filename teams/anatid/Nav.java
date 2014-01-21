@@ -8,10 +8,6 @@ public class Nav {
 	private static boolean sneak = false;
 	private static boolean engage = false;
 	private static int[] numEnemiesAttackingMoveDirs;
-	private static boolean haveCachedEntersLosingFightDecision = false;
-	private static boolean cachedEntersLosingFightDecision;
-
-	private static MapLocation enemyHQ; // we can't ever go too near the enemy HQ
 
 	private enum BugState {
 		DIRECT,
@@ -204,7 +200,6 @@ public class Nav {
 
 	public static void init(RobotController theRC) {
 		rc = theRC;
-		enemyHQ = rc.senseEnemyHQLocation();
 	}
 
 	public enum Sneak {
@@ -223,7 +218,6 @@ public class Nav {
 		sneak = (theSneak == Sneak.YES);
 		engage = (theEngage == Engage.YES);
 		numEnemiesAttackingMoveDirs = theNumEnemiesAttackingMoveDirs;
-		haveCachedEntersLosingFightDecision = false;
 
 		if (!theDest.equals(dest)) {
 			dest = theDest;

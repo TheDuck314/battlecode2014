@@ -1,4 +1,4 @@
-
+Goldob = TooMuchSwagException
 ir0x539 = Maxwell Mann Tribute Band
 slightlyeskew = Battle Cattle
 nicketh = Proxy 2 Gate
@@ -6,6 +6,10 @@ ryancheu = Proxy 2 Gate
 jianty_ = Armada
 slumerville = DoYouEvenMilk
 tfk1 = quotes
+
+team160 - 0xg
+   1/21 - camps your spawn!! This can actually be pretty effective! Except they don't yet go after your
+          pastrs or do anything else...
 
 team104 - The Simple Soldier
    1/20: they are rushing (rallying to center and then attacking my pastr). This was quite effective against my
@@ -18,6 +22,8 @@ team160 - 0xg
          very effective.
 
 team117 - Fragments of a Hologram Rose
+   1/21: I can still hold off his rush (barely) but only because he makes mistakes. I think
+         it's becoming clear that a well-implemented rush will beat a quick tower+pastr strat
    1/19: he's imitating proxy's sprint strategy, with some success
    HAS SOME REALLY COOL PATHFINDING: SEE GAME 752
    with framework-1-9: they built all pastrs early, I punished them and won
@@ -93,8 +99,4 @@ team056 - baumteam
    with framework-1-9: they try to use soldiers to herd into pastrs next to HQ
                        they synchronize the herding of a bunch of soldier.
                        it didn't work well, so I won with a single well-placed pastr
-
-team225 - The Simple Soldier
-   with framework-1-9: they built too many pastrs, and I punished them and won
-
 

@@ -160,7 +160,7 @@ public class BotSoldier extends Bot {
 	private static boolean tryReceivePastrLocations() throws GameActionException {
 		numPastrLocations = MessageBoard.NUM_PASTR_LOCATIONS.readInt();
 		if (numPastrLocations == 0) {
-			if (Strategy.active == Strategy.PROXY || Strategy.active == Strategy.PROXY_ATTACK) return true;
+			if (Strategy.active == Strategy.PROXY || Strategy.active == Strategy.PROXY_ATTACK || Strategy.active == Strategy.RUSH) return true;
 			else return false;
 		}
 
