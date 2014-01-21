@@ -4,8 +4,20 @@ import battlecode.common.*;
 
 public class Bfs {
 
-	private static final int NUM_PAGES = 4;
-	private static final int PAGE_SIZE = 100 * 100;
+	private static int NUM_PAGES;
+	private static int PAGE_SIZE;
+	private static int MAP_HEIGHT;
+	private static final int MAX_PAGES = 5;
+
+	private static RobotController rc;
+
+	public static void init(RobotController theRC) {
+		rc = theRC;
+		MAP_HEIGHT = rc.getMapHeight();
+		PAGE_SIZE = rc.getMapWidth() * MAP_HEIGHT;
+		NUM_PAGES = Math.min(40000 / PAGE_SIZE, MAX_PAGES);
+	}
+
 	private static final int pageMetadataBaseChannel = GameConstants.BROADCAST_MAX_CHANNELS - 100;
 
 	public static final int PRIORITY_HIGH = 2;
@@ -32,10 +44,10 @@ public class Bfs {
 	// rrrr = round last updated
 	// xx = dest x coordinate
 	// yy = dest y coordinate
-	private static void writePageMetadata(int page, int roundLastUpdated, MapLocation dest, int priority, boolean finished, RobotController rc)
+	private static void writePageMetadata(int page, int roundLastUpdated, MapLocation dest, int priority, boolean finished)
 			throws GameActionException {
 		int channel = pageMetadataBaseChannel + page;
-		int data = (finished ? 1000000000 : 0) + 100000000 * priority + 10000 * roundLastUpdated + 100 * dest.x + dest.y;
+		int data = (finished ? 1000000000 : 0) + 100000000 * priority + 10000 * roundLastUpdated + MAP_HEIGHT * dest.x + dest.y;
 		rc.broadcast(channel, data);
 	}
 
@@ -53,19 +65,19 @@ public class Bfs {
 
 	private static MapLocation getMetadataDestination(int metadata) {
 		metadata %= 10000;
-		return new MapLocation(metadata / 100, metadata % 100);
+		return new MapLocation(metadata / MAP_HEIGHT, metadata % MAP_HEIGHT);
 	}
 
-	private static int readPageMetadata(int page, RobotController rc) throws GameActionException {
+	private static int readPageMetadata(int page) throws GameActionException {
 		int channel = pageMetadataBaseChannel + page;
 		int data = rc.readBroadcast(channel);
 		return data;
 	}
 
-	private static int findFreePage(MapLocation dest, int priority, RobotController rc) throws GameActionException {
+	private static int findFreePage(MapLocation dest, int priority) throws GameActionException {
 		// see if we can reuse a page we used before
 		if (dest.equals(previousDest) && previousPage != -1) {
-			int previousPageMetadata = readPageMetadata(previousPage, rc);
+			int previousPageMetadata = readPageMetadata(previousPage);
 			if (getMetadataRoundLastUpdated(previousPageMetadata) == previousRoundWorked && getMetadataDestination(previousPageMetadata).equals(dest)) {
 				if (getMetadataIsFinished(previousPageMetadata)) {
 					return -1; // we're done! don't do any work!
@@ -81,7 +93,7 @@ public class Bfs {
 		int oldestPage = -1;
 		int oldestPageRoundUpdated = 999999;
 		for (int page = 0; page < NUM_PAGES; page++) {
-			int metadata = readPageMetadata(page, rc);
+			int metadata = readPageMetadata(page);
 			if (metadata == 0) { // untouched page
 				if (oldestPageRoundUpdated > 0) {
 					oldestPage = page;
@@ -141,16 +153,16 @@ public class Bfs {
 	}
 
 	// HQ or pastr calls this function to spend spare bytecodes computing paths for soldiers
-	public static void work(MapLocation dest, RobotController rc, int priority, int bytecodeLimit) throws GameActionException {
-		int page = findFreePage(dest, priority, rc);
-		Debug.indicate("pages", 1, "Pathing to " + dest.toString() + "; using page " + page);
+	public static void work(MapLocation dest, int priority, int bytecodeLimit) throws GameActionException {
+		int page = findFreePage(dest, priority);
+//		Debug.indicate("pages", 1, "Pathing to " + dest.toString() + "; using page " + page);
 		if (page == -1) return; // We can't do any work, or don't have to
 
 		if (!dest.equals(previousDest)) {
-			Debug.indicate("pages", 0, "initingQueue");
+//			Debug.indicate("pages", 0, "initingQueue");
 			initQueue(dest);
 		} else {
-			Debug.indicate("pages", 0, "queue already inited");
+//			Debug.indicate("pages", 0, "queue already inited");
 		}
 
 		previousDest = dest;
@@ -169,30 +181,30 @@ public class Bfs {
 
 			int locX = loc.x;
 			int locY = loc.y;
-			for (int i = 8; i-- > 0;) { // 3 + 8*3 = 27
-				int x = locX + dirsX[i]; // 6
-				int y = locY + dirsY[i]; // 6
-				if (x > 0 && y > 0 && x < mapWidth && y < mapHeight && !wasQueued[x][y]) { // max 16
-					MapLocation newLoc = new MapLocation(x, y); // 6
-					if (rc.senseTerrainTile(newLoc) != TerrainTile.VOID /* 5 + 10 */&& (destInSpawn || !Util.inHQAttackRange(newLoc, enemyHQ)/* usually 22 */)) {
-						publishResult(page, newLoc, dest, dirs[i], rc); // 7 + publishResult
+			for (int i = 8; i-- > 0;) {
+				int x = locX + dirsX[i]; 
+				int y = locY + dirsY[i]; 
+				if (x > 0 && y > 0 && x < mapWidth && y < mapHeight && !wasQueued[x][y]) {
+					MapLocation newLoc = new MapLocation(x, y);
+					if (rc.senseTerrainTile(newLoc) != TerrainTile.VOID && (destInSpawn || !Bot.isInTheirHQAttackRange(newLoc))) {
+						publishResult(page, newLoc, dest, dirs[i]);
 
 						// push newLoc onto queue
-						locQueue[locQueueTail] = newLoc; // 4
-						locQueueTail++; // 4
-						wasQueued[x][y] = true; // 6
+						locQueue[locQueueTail] = newLoc;
+						locQueueTail++;
+						wasQueued[x][y] = true;
 					}
 				}
 			}
 		}
 
 		boolean finished = locQueueHead == locQueueTail;
-		Debug.indicate("pages", 2, "finished = " + finished + "; locQueueHead = " + locQueueHead);
-		writePageMetadata(page, Clock.getRoundNum(), dest, priority, finished, rc);
+//		Debug.indicate("pages", 2, "finished = " + finished + "; locQueueHead = " + locQueueHead);
+		writePageMetadata(page, Clock.getRoundNum(), dest, priority, finished);
 	}
 
 	private static int locChannel(int page, MapLocation loc) {
-		return PAGE_SIZE * page + 100 * loc.x + loc.y;
+		return PAGE_SIZE * page + MAP_HEIGHT * loc.x + loc.y;
 	}
 
 	// We store the data in this format:
@@ -201,19 +213,19 @@ public class Bfs {
 	// d = direction to move
 	// xx = x coordinate of destination
 	// yy = y coordinate of destination
-	private static void publishResult(int page, MapLocation here, MapLocation dest, Direction dir, RobotController rc) throws GameActionException {
-		int data = 10000000 + (dir.ordinal() * 100000) + (dest.x * 100) + (dest.y);
+	private static void publishResult(int page, MapLocation here, MapLocation dest, Direction dir) throws GameActionException {
+		int data = 10000000 + (dir.ordinal() * 100000) + (dest.x * MAP_HEIGHT) + (dest.y);
 		int channel = locChannel(page, here);
 		rc.broadcast(channel, data);
 	}
 
 	// Soldiers call this to get pathing directions
-	public static Direction readResult(MapLocation here, MapLocation dest, RobotController rc) throws GameActionException {
+	public static Direction readResult(MapLocation here, MapLocation dest) throws GameActionException {
 		for (int page = 0; page < NUM_PAGES; page++) {
 			int data = rc.readBroadcast(locChannel(page, here));
 			if (data != 0) { // all valid published results are != 0
 				data -= 10000000;
-				if (((dest.x * 100) + (dest.y)) == (data % 100000)) {
+				if (((dest.x * MAP_HEIGHT) + (dest.y)) == (data % 100000)) {
 					return Direction.values()[data / 100000];
 				}
 			}

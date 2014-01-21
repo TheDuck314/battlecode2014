@@ -2,45 +2,42 @@ package anatid;
 
 import battlecode.common.*;
 
-public abstract class Bot {
-	public RobotController rc;
-	public Team us, them;
-	public MapLocation ourHQ, theirHQ;
-	public MapLocation here;
+public class Bot {
+	static RobotController rc;
+	static Team us, them;
+	static MapLocation ourHQ, theirHQ;
+	static int mapWidth, mapHeight;
 
-	public Bot(RobotController theRC) {
+	protected static void init(RobotController theRC) throws GameActionException {
 		rc = theRC;
 		us = rc.getTeam();
 		them = us.opponent();
 
 		ourHQ = rc.senseHQLocation();
 		theirHQ = rc.senseEnemyHQLocation();
-
+		
+		mapWidth = rc.getMapWidth();
+		mapHeight = rc.getMapHeight();
+		
 		FastRandom.init();
 		MessageBoard.init(theRC);
-		//Debug.init(rc, "pop");
+		Bfs.init(theRC);
+	}
+	
+	public static boolean isInTheirHQAttackRange(MapLocation loc) {
+		int distSq = theirHQ.distanceSquaredTo(loc);
+		if (distSq < 25) return true;
+		else if (distSq > 25) return false;
+		else return (loc.x != theirHQ.x) && (loc.y != theirHQ.y);
 	}
 
-	void updateData() {
-		here = rc.getLocation();
+	public static boolean isInOurHQAttackRange(MapLocation loc) {
+		int distSq = ourHQ.distanceSquaredTo(loc);
+		if (distSq < 25) return true;
+		else if (distSq > 25) return false;
+		else return (loc.x != ourHQ.x) && (loc.y != ourHQ.y);	}
+	
+	public static boolean isOnMap(MapLocation loc) {
+		return loc.x >= 0 && loc.y >= 0 && loc.x < mapWidth && loc.y < mapHeight;
 	}
-
-	public void loop() throws Exception {
-		while (true) {
-			// int turn = Clock.getRoundNum();
-			try {
-				updateData();
-				turn();
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-			// if (Clock.getRoundNum() != turn) {
-			// System.out.println("!!!!!!!! WENT OVER BYTECODE LIMIT !!!!!!!");
-			// throw new Exception("Fix your bytecodes");
-			// }
-			rc.yield();
-		}
-	}
-
-	public abstract void turn() throws GameActionException;
 }

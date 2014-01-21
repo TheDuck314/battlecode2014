@@ -1,542 +1,545 @@
 package anatid;
 
+import java.util.ArrayList;
+
 import battlecode.common.*;
 
 public class BotSoldier extends Bot {
-	public BotSoldier(RobotController theRC) throws GameActionException {
-		super(theRC);
-		Debug.init(theRC, "nav");
+	public static void loop(RobotController theRC) throws Exception {
+		init(theRC);
+		while (true) {
+			try {
+				turn();
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+			rc.yield();
+		}
+	}
+
+	protected static void init(RobotController theRC) throws GameActionException {
+		Bot.init(theRC);
+		Debug.init(theRC, "micro");
 		Nav.init(theRC);
 
 		spawnOrder = MessageBoard.SPAWN_COUNT.readInt();
 		// Debug.indicate("buildorder", 0, "I am robot #" + spawnOrder);
+
+		tryReceivePastrLocations();
+		tryClaimBuildAssignment();
+		tryClaimSuppressorAssignment();
+		// Debug.indicate("assign", 0, "after constructor, towerBuildAssignmentIndex = " + towerBuildAssignmentIndex + ", pastrBuildAssignmentIndex = "
+		// + pastrBuildAssignmentIndex);
 	}
 
-	private enum MicroStance {
-		DEFENSIVE, AGGRESSIVE, HARRASS
+	public enum MicroStance {
+		DEFENSIVE,
+		AGGRESSIVE,
+		HARRASS
 	}
 
-	MicroStance stance; // how to behave in combat
-	Nav.Engage navEngage; // whether to engage enemies during navigation
+	static MapLocation here;
+	static RobotInfo[] visibleEnemies; // enemies within vision radius (35)
+	static RobotInfo[] attackableEnemies; // enemies within attack radius(10)
+	static int numNonConstructingSoldiersAttackingUs;
+	static int[] cachedNumEnemiesAttackingMoveDirs; // computed in doObligatoryMicro
+	static boolean fightIsWinning;
+	static boolean tryingSelfDestruct = false;
+	static boolean beVeryCautious = false;
 
-	RobotInfo[] visibleEnemies; // enemies within vision radius (35)
-	RobotInfo[] attackableEnemies; // enemies within attack radius(10)
-	int spawnOrder;
+	static int spawnOrder;
 
-	public void turn() throws GameActionException {
-		if (!rc.isActive()) return;
-		if (rc.getConstructingRounds() > 0) return; // can't do anything while constructing; is this redundant?
+	static int numPastrLocations = 0;
+	static MapLocation[] bestPastrLocations = new MapLocation[BotHQ.MAX_PASTR_LOCATIONS];
+	static int towerBuildAssignmentIndex = -1;
+	static int pastrBuildAssignmentIndex = -1;
+	static int suppressorBuildAssignmentIndex = -1;
+	static boolean isFirstTurn = true;
 
-		Strategy.active = MessageBoard.STRATEGY.readStrategy();
-		if (Strategy.active == Strategy.UNDECIDED) return;
-
-		if (Strategy.active == Strategy.HQ_PASTR) {
-			if (doHQPastrStratBuilding()) return;
-		}
-
-		updateEnemyData();
-		MapLocation attackTarget = MessageBoard.ATTACK_LOC.readMapLocation();
-		stance = chooseMicroStance(attackTarget);
-		navEngage = stance == MicroStance.AGGRESSIVE ? Nav.Engage.YES : Nav.Engage.NO;
-
-		if (mercyKillPastrs()) return;
-
-		// If there are enemies in attack range, fight!
-		if (attackableEnemies.length > 0 && rc.isActive()) {
-			fight();
+	private static void turn() throws GameActionException {
+		Debug.debug_bytecodes_init();
+		here = rc.getLocation();
+		if (!rc.isActive()) {
+			// can self-destruct even with large actiondelay:
+			if (tryingSelfDestruct) {
+				updateEnemyData();
+				trySelfDestruct();
+			}
 			return;
 		}
 
-		// If we are in attack mode, move toward the attack target and engage.
-		if (attackTarget != null) {
-			if (attackTarget.distanceSquaredTo(theirHQ) <= 5 && here.distanceSquaredTo(theirHQ) <= 35) {
-				harrassTheirHQ();
-				return;
-			} else {
-				Nav.goTo(attackTarget, Nav.Sneak.NO, navEngage);
-				// If we didn't move in Nav, try fighting:
-				if (rc.isActive() && visibleEnemies.length > 0) fight();
+		if (Strategy.active == Strategy.UNDECIDED) {
+			Strategy.active = MessageBoard.STRATEGY.readStrategy();
+			if (Strategy.active == Strategy.UNDECIDED) return; // don't do anything until we know the strategy
+		}
+
+		// Don't do anything until we get the list of pastr locations
+		if (numPastrLocations == 0) {
+			if (!tryReceivePastrLocations()) return;
+		}
+
+		if (MessageBoard.PASTR_DISTRESS_SIGNAL.readInt() >= Clock.getRoundNum() - 1) {
+			if (mercyKillPastrs()) return;
+		}
+
+		updateEnemyData();
+
+		if (tryingSelfDestruct) {
+			if (trySelfDestruct()) return;
+		}
+
+		if (visibleEnemies.length > 0 && rc.isActive()) {
+			doObligatoryMicro();
+			if (!rc.isActive()) {
+				Debug.debug_bytecodes("after obligatory micro (returning)");
 				return;
 			}
 		}
 
-		if (Strategy.active == Strategy.NOISE_THEN_ONE_PASTR || Strategy.active == Strategy.ONE_PASTR_THEN_NOISE) {
-			// See if we should build something
-			if (tryBuildNoiseTower()) return;
+		if (tryBuildSomething()) {
+			Debug.debug_bytecodes("after tryBuild (returning)");
+			return;
+		}
 
-			// Build or defend a pastr
-			buildOrDefendPastr();
+		// Check if someone else has taken our job from us:
+		if (!isFirstTurn) {
+			if (towerBuildAssignmentIndex != -1) {
+				if (!MessageBoard.TOWER_BUILDER_ROBOT_IDS.checkIfIOwnAssignment(towerBuildAssignmentIndex)) towerBuildAssignmentIndex = -1;
+			}
+			if (pastrBuildAssignmentIndex != -1) {
+				if (!MessageBoard.PASTR_BUILDER_ROBOT_IDS.checkIfIOwnAssignment(pastrBuildAssignmentIndex)) pastrBuildAssignmentIndex = -1;
+			}
+			if (suppressorBuildAssignmentIndex != -1) {
+				if (!MessageBoard.SUPPRESSOR_BUILDER_ROBOT_IDS.checkIfIOwnAssignment(suppressorBuildAssignmentIndex)) suppressorBuildAssignmentIndex = -1;
+			}
+		}
+		isFirstTurn = false;
+
+		int destIndex = towerBuildAssignmentIndex;
+		if (destIndex == -1) destIndex = pastrBuildAssignmentIndex;
+		if (destIndex != -1) {
+			// Debug.indicate("assign", 1, "going to pastr build location " + destIndex);
+			Nav.goTo(bestPastrLocations[destIndex], Nav.Sneak.NO, fightIsWinning ? Nav.Engage.YES : Nav.Engage.NO, countNumEnemiesAttackingMoveDirs());
+			return;
+		}
+
+		if (suppressorBuildAssignmentIndex != -1) {
+			MapLocation target = MessageBoard.SUPPRESSOR_TARGET_LOCATIONS.readFromMapLocationList(suppressorBuildAssignmentIndex);
+			if (tryBuildSuppressor(target)) return;
+			Nav.goTo(target, Nav.Sneak.NO, Nav.Engage.NO, countNumEnemiesAttackingMoveDirs());
+		}
+
+		MapLocation rallyLoc = MessageBoard.RALLY_LOC.readMapLocation();
+		if (rallyLoc != null) {
+			if (weAreNearEnemyPastr()) {
+				if (tryToKillCows()) {
+					return;
+				}
+			}
+			Nav.Sneak sneak = Nav.Sneak.NO;
+			for (int i = 0; i < numPastrLocations; i++) {
+				if (here.distanceSquaredTo(bestPastrLocations[i]) <= 49) {
+					sneak = Nav.Sneak.YES;
+					break;
+				}
+			}
+			if (visibleEnemies.length > 0 && here.distanceSquaredTo(rallyLoc) <= 49) {
+				if (doVoluntaryDefensiveMicro(sneak)) {
+					return;
+				}
+			}
+			Nav.Engage engage = fightIsWinning ? Nav.Engage.YES : Nav.Engage.NO;
+			// Debug.indicate("action", 0, "naving to rally loc (engage = " + engage.toString() + ")");
+			Debug.debug_bytecodes("before goTo rally");
+			Nav.goTo(rallyLoc, sneak, engage, countNumEnemiesAttackingMoveDirs());
+			Debug.debug_bytecodes("after goTo rally");
 		}
 	}
 
-	// Decide whether to behave aggressively or defensively. Only be aggressive if we are in attack mode
-	// and there is a decent number of allies around, or if we are in any mode and we have a big numbers advantage
-	private MicroStance chooseMicroStance(MapLocation attackTarget) throws GameActionException {
-		if (Strategy.active == Strategy.HQ_PASTR) return MicroStance.HARRASS;
+	// returns false if turn() should return, otherwise true
+	private static boolean tryReceivePastrLocations() throws GameActionException {
+		numPastrLocations = MessageBoard.NUM_PASTR_LOCATIONS.readInt();
+		if (numPastrLocations == 0) {
+			if (Strategy.active == Strategy.PROXY || Strategy.active == Strategy.PROXY_ATTACK || Strategy.active == Strategy.RUSH) return true;
+			else return false;
+		}
 
-		if (visibleEnemies.length == 0) {
-			return MicroStance.AGGRESSIVE; // stance doesn't matter if there are no enemies
-		} else {
-			int numAllies = 1; // us
-			numAllies += Math.max(numOtherAlliedSoldiersInRange(here, RobotType.SOLDIER.sensorRadiusSquared),
-					numOtherAlliedSoldiersInRange(Util.closest(visibleEnemies, here), 16));
+		for (int i = 0; i < numPastrLocations; i++) {
+			bestPastrLocations[i] = MessageBoard.BEST_PASTR_LOCATIONS.readFromMapLocationList(i);
+		}
 
-			if (attackTarget == null) {
-				if (numAllies >= visibleEnemies.length * 2 || numAllies > visibleEnemies.length + 3) return MicroStance.AGGRESSIVE;
-				else return MicroStance.DEFENSIVE;
-			} else {
-				if (numAllies >= 2 && numAllies >= visibleEnemies.length - 1) return MicroStance.AGGRESSIVE;
-				else return MicroStance.DEFENSIVE;
+		if (Strategy.active == Strategy.ONE_PASTR || Strategy.active == Strategy.ONE_PASTR_SUPPRESSOR || Strategy.active == Strategy.SCATTER
+				|| Strategy.active == Strategy.SCATTER_SUPPRESSOR) {
+			tryClaimBuildAssignment();
+		}
+		return true;
+	}
+
+	private static void tryClaimBuildAssignment() throws GameActionException {
+		// See if we can assign ourselves to a job:
+		for (int i = 0; i < numPastrLocations; i++) {
+			if (MessageBoard.TOWER_BUILDER_ROBOT_IDS.checkIfAssignmentUnowned(i)) {
+				MessageBoard.TOWER_BUILDER_ROBOT_IDS.claimAssignment(i);
+				towerBuildAssignmentIndex = i;
+				break;
+			}
+		}
+		if (towerBuildAssignmentIndex == -1) {
+			for (int i = 0; i < numPastrLocations; i++) {
+				if (MessageBoard.PASTR_BUILDER_ROBOT_IDS.checkIfAssignmentUnowned(i)) {
+					MessageBoard.PASTR_BUILDER_ROBOT_IDS.claimAssignment(i);
+					pastrBuildAssignmentIndex = i;
+					break;
+				}
 			}
 		}
 	}
 
-	private boolean doHQPastrStratBuilding() throws GameActionException {
-		if (spawnOrder == 1) {
-			MapLocation pastrLoc = ourHQ.add(ourHQ.directionTo(here).rotateRight().rotateRight());
-			constructAndAdvertiseNoiseTower(pastrLoc);
-			return true;
+	private static void tryClaimSuppressorAssignment() throws GameActionException {
+		int numSuppressors = MessageBoard.NUM_SUPPRESSORS.readInt();
+		for (int i = 0; i < numSuppressors; i++) {
+			if (MessageBoard.SUPPRESSOR_BUILDER_ROBOT_IDS.checkIfAssignmentUnowned(i)) {
+				MessageBoard.SUPPRESSOR_BUILDER_ROBOT_IDS.claimAssignment(i);
+				suppressorBuildAssignmentIndex = i;
+			}
 		}
-		if (spawnOrder == 2) {
-			// a trick: make the pastr go up just after the noise tower
-			// which case make the pastr immediately. Keeps the enemy guessing for an extra ~20 rounds and doesn't
-			// sacrifice any cows
-			if (Clock.getRoundNum() < 80) return true;
-			else rc.construct(RobotType.PASTR);
-			return true;
-		}
-		// Check if the initial pastr or noise tower got destroyed. If so, rebuild it if we are adjacent to the HQ
-		if (Clock.getRoundNum() > 200 && here.isAdjacentTo(ourHQ) && !here.directionTo(ourHQ).isDiagonal()) {
-			if (rc.sensePastrLocations(us).length == 0) {
-				int otherRebuildRoundStart = MessageBoard.REBUILDING_HQ_PASTR_ROUND_START.readInt();
-				if (Clock.getRoundNum() > 2 + RobotType.PASTR.captureTurns + otherRebuildRoundStart) {
-					MessageBoard.REBUILDING_HQ_PASTR_ROUND_START.writeInt(Clock.getRoundNum());
+	}
+
+	private static boolean tryBuildSomething() throws GameActionException {
+		if (1 + numOtherAlliedSoldiersInRange(here, RobotType.SOLDIER.sensorRadiusSquared) <= 2 * visibleEnemies.length) return false;
+
+		for (int i = 0; i < numPastrLocations; i++) {
+			MapLocation pastrLoc = bestPastrLocations[i];
+			if (here.equals(pastrLoc)) {
+				// claim the pastr build job if someone else thought they were going to do it
+				if (!MessageBoard.PASTR_BUILDER_ROBOT_IDS.checkIfIOwnAssignment(i)) {
+					MessageBoard.PASTR_BUILDER_ROBOT_IDS.claimAssignment(i);
+				}
+				if (Util.containsNoiseTower(rc.senseNearbyGameObjects(Robot.class, pastrLoc, 2, us), rc)) {
+					// Debug.indicate("build", 0, "building pastr!");
 					rc.construct(RobotType.PASTR);
+				}
+				return true;
+			}
+
+			if (here.isAdjacentTo(pastrLoc)) {
+				if (!Util.containsConstructingRobotOrNoiseTower(rc.senseNearbyGameObjects(Robot.class, pastrLoc, 2, us), rc)) {
+					// claim the tower build job if someone else thought they were going to do it
+					if (!MessageBoard.TOWER_BUILDER_ROBOT_IDS.checkIfAssignmentUnowned(i)) {
+						MessageBoard.TOWER_BUILDER_ROBOT_IDS.claimAssignment(i);
+					}
+					constructNoiseTower(pastrLoc);
 					return true;
 				}
 			}
-			MapLocation noiseTowerLoc = MessageBoard.NOISE_TOWER_BUILD_LOCATION.readMapLocation();
-			if (rc.senseNearbyGameObjects(Robot.class, noiseTowerLoc, 0, us).length == 0) {
-				MapLocation[] ourPastrs = rc.sensePastrLocations(us);
-				MapLocation pastrLoc = ourPastrs.length > 0 ? ourPastrs[0] : ourHQ;
-				constructAndAdvertiseNoiseTower(pastrLoc);
+		}
+		return false;
+	}
+
+	private static boolean tryBuildSuppressor(MapLocation target) throws GameActionException {
+
+		if (here.distanceSquaredTo(target) <= RobotType.NOISETOWER.attackRadiusMaxSquared) {
+			if (1 + numOtherAlliedSoldiersInRange(here, RobotType.SOLDIER.sensorRadiusSquared) <= 2 * visibleEnemies.length) {
+				return true;
+			} else {
+				rc.construct(RobotType.NOISETOWER);
 				return true;
 			}
 		}
 		return false;
 	}
 
-	int pastrDelayFinesseWaitRoundsRemaining = 32;
-
-	private void buildOrDefendPastr() throws GameActionException {
-		MapLocation desiredPastrLoc = MessageBoard.BEST_PASTR_LOC.readMapLocation();
-		if (desiredPastrLoc != null) {
-			if (here.equals(desiredPastrLoc)) {
-				// We get to build the pastr!
-				if (rc.isActive()) {
-					// a trick: make the pastr go up just after the noise tower, if we're already building a noise tower
-					// which case make the pastr immediately. Keeps the enemy guessing for an extra ~20 rounds and doesn't
-					// sacrifice any cows
-					// First, make sure the noise tower builder is still alive:
-					MapLocation noiseTowerLoc = MessageBoard.NOISE_TOWER_BUILD_LOCATION.readMapLocation();
-					if (noiseTowerLoc != null) {
-						if (numOtherAlliedSoldiersInRange(noiseTowerLoc, 0) == 1) {
-							// Next, determine when construction started
-							int noiseTowerBuildStartRound = MessageBoard.NOISE_TOWER_BUILD_START_ROUND.readInt();
-							// Start construction 80 rounds after that. Before that, sit tight:
-							if (Clock.getRoundNum() < 80 + noiseTowerBuildStartRound) {
-								return;
-							}
-						}
-					} else {
-						// no one's building a noise tower yet. Wait some time in case someone is about to start
-						// Also, we won't start the noise tower build until at least turn 81 since that is when HQ
-						// tower people set up their pastr, so wait at least until then
-						pastrDelayFinesseWaitRoundsRemaining--;
-						// Debug.indicate("finesse", 0, "rounds remaining = " + pastrDelayFinesseWaitRoundsRemaining);
-						if (Clock.getRoundNum() <= 85 || pastrDelayFinesseWaitRoundsRemaining > 0) return;
-					}
-					// Either we've given up on the trick or the trick delay is over:
-					rc.construct(RobotType.PASTR);
-					return;
-				}
-			} else {
-				// Go to the pastr location and fight if necessary
-				int distSq = here.distanceSquaredTo(desiredPastrLoc);
-				if (distSq <= 8 && visibleEnemies.length > 0) {
-					if (rc.isActive()) fight();
-				} else {
-					Nav.Sneak navSneak = distSq <= 30 && visibleEnemies.length == 0 && rc.sensePastrLocations(us).length > 0 ? Nav.Sneak.YES : Nav.Sneak.NO;
-					Nav.goTo(desiredPastrLoc, navSneak, navEngage);
-
-					// If we didn't move, consider fighting
-					if (rc.isActive() && visibleEnemies.length > 0) fight();
-				}
-			}
-		}
-	}
-
-	private void constructAndAdvertiseNoiseTower(MapLocation pastrLoc) throws GameActionException {
-		MessageBoard.NOISE_TOWER_BUILD_LOCATION.writeMapLocation(here);
-		MessageBoard.NOISE_TOWER_BUILD_START_ROUND.writeInt(Clock.getRoundNum());
+	private static void constructNoiseTower(MapLocation pastrLoc) throws GameActionException {
 		rc.construct(RobotType.NOISETOWER);
 		HerdPattern.computeAndPublish(here, pastrLoc, rc);
 	}
 
-	// After a little while, if nothing has gone wrong, if we are next to a pastr and no one
-	// else is building or has built a noise tower, build one.
-	private boolean tryBuildNoiseTower() throws GameActionException {
-		if (!rc.isActive()) return false;
-
-		if (Strategy.active == Strategy.HQ_PASTR) {
-			// in this strategy, we should build a noise tower if the previous one was destroyed
-			// and we are next to the HQ
-			if (here.isAdjacentTo(ourHQ)) {
-				// Check where the original noise tower was
-				MapLocation existingBuilder = MessageBoard.NOISE_TOWER_BUILD_LOCATION.readMapLocation();
-				if (existingBuilder != null) {
-					// If the existing builder is still around, don't build a noise tower
-					if (!here.equals(existingBuilder) && rc.senseNearbyGameObjects(Robot.class, existingBuilder, 0, us).length > 0) {
-						return false;
-					}
-				}
-				// Find where our pastr is
-				MapLocation[] ourPastrs = rc.sensePastrLocations(us);
-				MapLocation pastrLoc = ourPastrs.length > 0 ? ourPastrs[0] : ourHQ;
-				// build the noise tower
-				constructAndAdvertiseNoiseTower(pastrLoc);
-				return true;
-			}
-		}
-
-		// Only allowed to build noise tower if adjacent to pastr
-		MapLocation pastrLoc = MessageBoard.BEST_PASTR_LOC.readMapLocation();
-		if (pastrLoc == null) return false;
-		if (!here.isAdjacentTo(pastrLoc)) return false;
-
-		switch (Strategy.active) {
-			case ONE_PASTR_THEN_NOISE:
-				// In this strategy, we are cautious and don't build a noise tower until they build a pastr
-				// or until a certain number of rounds have elapsed. This is to try to defend better against
-				// rushes
-				int numEnemyPastrs = rc.sensePastrLocations(them).length;
-				if (Clock.getRoundNum() < 300 && numEnemyPastrs == 0) return false;
-
-				// Usually we don't want to build a noise tower until one of our bots has made it to our pastr
-				// location. However, we can build the noise tower if they have put up a pastr. Said another way,
-				// *don't* build the noise tower if they have no pastrs and no one is at our pastr location
-				if (numEnemyPastrs == 0 && rc.senseNearbyGameObjects(Robot.class, pastrLoc, 0, us).length == 0) return false;
-				break;
-
-			case NOISE_THEN_ONE_PASTR:
-				// no such restriction exists for this strategy
-				break;
-
-			default: // this shouldn't happen
-				break;
-		}
-
-		// Check if someone else is already building a noise tower
-		MapLocation existingBuilder = MessageBoard.NOISE_TOWER_BUILD_LOCATION.readMapLocation();
-		if (existingBuilder != null) {
-			// Check if that bot has actually been destroyed
-			if (rc.senseNearbyGameObjects(Robot.class, existingBuilder, 0, us).length > 0) {
-				return false;
-			}
-		}
-
-		// Construct the noise tower and advertise the fact that we are doing it
-		constructAndAdvertiseNoiseTower(pastrLoc);
-		return true;
-	}
-
-	private void updateEnemyData() throws GameActionException {
+	private static void updateEnemyData() throws GameActionException {
 		Robot[] visibleEnemyRobots = rc.senseNearbyGameObjects(Robot.class, RobotType.SOLDIER.sensorRadiusSquared, them);
 
 		visibleEnemies = new RobotInfo[visibleEnemyRobots.length];
+		int numVisibleNonConstructingEnemySoldiers = 0;
+		for (int i = visibleEnemyRobots.length; i-- > 0;) {
+			visibleEnemies[i] = rc.senseRobotInfo(visibleEnemyRobots[i]);
+			if (visibleEnemies[i].type == RobotType.SOLDIER && !visibleEnemies[i].isConstructing) numVisibleNonConstructingEnemySoldiers++;
+		}
 
-		boolean[] attackable = new boolean[visibleEnemyRobots.length];
-		int numAttackableEnemies = 0;
-		for (int i = visibleEnemies.length; i-- > 0;) {
-			RobotInfo info = rc.senseRobotInfo(visibleEnemyRobots[i]);
-			visibleEnemies[i] = info;
-			if (here.distanceSquaredTo(info.location) <= RobotType.SOLDIER.attackRadiusMaxSquared) {
-				numAttackableEnemies++;
-				attackable[i] = true;
+		numNonConstructingSoldiersAttackingUs = 0;
+		if (visibleEnemies.length > 0) {
+			Robot[] attackableEnemyRobots = rc.senseNearbyGameObjects(Robot.class, RobotType.SOLDIER.attackRadiusMaxSquared, them);
+			attackableEnemies = new RobotInfo[attackableEnemyRobots.length];
+			for (int i = attackableEnemies.length; i-- > 0;) {
+				RobotInfo info = rc.senseRobotInfo(attackableEnemyRobots[i]);
+				attackableEnemies[i] = info;
+				if (info.type == RobotType.SOLDIER && !info.isConstructing) numNonConstructingSoldiersAttackingUs++;
+			}
+		} else {
+			attackableEnemies = new RobotInfo[0];
+		}
+
+		// clear the cached value of this array at the beginning of each turn:
+		cachedNumEnemiesAttackingMoveDirs = null;
+		switch (numVisibleNonConstructingEnemySoldiers) {
+			case 0:
+				fightIsWinning = true;
+				break;
+			case 1:
+				fightIsWinning = rc.senseNearbyGameObjects(Robot.class, here, 35, us).length >= 2;
+				break;
+			case 2:
+				fightIsWinning = rc.senseNearbyGameObjects(Robot.class, here, 35, us).length >= 4;
+				break;
+			case 3:
+				fightIsWinning = rc.senseNearbyGameObjects(Robot.class, here, 35, us).length >= 5;
+				break;
+			default:
+				fightIsWinning = rc.senseNearbyGameObjects(Robot.class, here, 35, us).length >= (int) (1.5 * numVisibleNonConstructingEnemySoldiers);
+				break;
+		}
+	}
+
+	private static boolean trySelfDestruct() throws GameActionException {
+		double maxDamage = GameConstants.SELF_DESTRUCT_BASE_DAMAGE + GameConstants.SELF_DESTRUCT_DAMAGE_FACTOR * rc.getHealth();
+		double damageDealt = 0;
+		for (RobotInfo info : attackableEnemies) {
+			if (info.location.isAdjacentTo(here)) {
+				damageDealt += Math.min(info.health, maxDamage);
 			}
 		}
-		attackableEnemies = new RobotInfo[numAttackableEnemies];
-		int enemyCounter = 0;
-		for (int i = visibleEnemies.length; i-- > 0;) {
-			if (attackable[i]) attackableEnemies[enemyCounter++] = visibleEnemies[i];
+		damageDealt -= maxDamage * rc.senseNearbyGameObjects(Robot.class, here, 2, us).length;
+		if (damageDealt > rc.getHealth() * 1.5
+				|| (damageDealt > rc.getHealth() && rc.getHealth() < 1.5 * RobotType.SOLDIER.attackPower * numNonConstructingSoldiersAttackingUs)) {
+			MessageBoard.SELF_DESTRUCT_LOCKOUT_ROUND.writeInt(Clock.getRoundNum() + 2);
+			MessageBoard.SELF_DESTRUCT_LOCKOUT_ID.writeInt(rc.getRobot().getID());
+			rc.selfDestruct();
+			return true;
+		}
+		return false;
+	}
+
+	private static boolean doVoluntaryDefensiveMicro(Nav.Sneak sneak) throws GameActionException {
+		// We aren't in combat. This function just moves cautiously toward the nearest enemy.
+		MapLocation closestEnemy = Util.closestNonHQ(visibleEnemies, rc);
+		return tryMoveTowardLocationWithMaxEnemyExposure(closestEnemy, 0, sneak);
+	}
+
+	// obligatory micro is attacks or movements that we have to do because either we or a nearby ally is in combat
+	private static boolean doObligatoryMicro() throws GameActionException {
+		if (numNonConstructingSoldiersAttackingUs >= 1) {
+			if (rc.getHealth() > RobotType.SOLDIER.attackPower * numNonConstructingSoldiersAttackingUs) {
+				if (Clock.getRoundNum() >= MessageBoard.SELF_DESTRUCT_LOCKOUT_ROUND.readInt()
+						|| rc.getRobot().getID() == MessageBoard.SELF_DESTRUCT_LOCKOUT_ID.readInt()) {
+					double requiredSelfDestructDamage = rc.getHealth() * 1.5;
+					if (tryMoveForSelfDestruct(requiredSelfDestructDamage)) {
+						tryingSelfDestruct = true;
+						return true;
+					} else {
+						tryingSelfDestruct = false;
+					}
+				}
+			}
+
+			// we are in combat
+			// If we are getting double-teamed worse than any of the enemies we are fighting, try to retreat
+			int maxAlliesAttackingEnemy = 0;
+			for (int i = attackableEnemies.length; i-- > 0;) {
+				// int numAlliesAttackingEnemy = 1 + numOtherAlliedSoldiersInAttackRange(attackableEnemies[i].location);
+				// we deliberately include buildings in this count to encourage our soldiers to defend buildings:
+				int numAlliesAttackingEnemy = 1 + numOtherAlliedSoldiersAndBuildingsInAttackRange(attackableEnemies[i].location);
+				if (numAlliesAttackingEnemy > maxAlliesAttackingEnemy) maxAlliesAttackingEnemy = numAlliesAttackingEnemy;
+			}
+			if (numNonConstructingSoldiersAttackingUs == 1) {
+				if (maxAlliesAttackingEnemy == 1) {
+					// we are in a 1v1. fight if we are winning, otherwise retreat
+					RobotInfo singleEnemy = Util.findANonConstructingSoldier(attackableEnemies);
+					if (rc.getHealth() >= singleEnemy.health || fightIsWinning) {
+						attackAndRecord(singleEnemy);
+					} else {
+						retreatOrFight();
+					}
+				} else {
+					// we outnumber the lone enemy. kill him
+					RobotInfo singleEnemy = Util.findANonConstructingSoldier(attackableEnemies);
+					attackAndRecord(singleEnemy);
+				}
+			} else if (!fightIsWinning && numNonConstructingSoldiersAttackingUs > maxAlliesAttackingEnemy) {
+				// We are getting doubled teamed too badly.
+				retreatOrFight();
+			} else {
+				// Several enemies can attack us, but we are also double teaming the enemy badly enough to keep fighting
+				// Debug.indicate("micro", 0, "attacking");
+				attackANonConstructingSoldier();
+			}
+			return true;
+		} else {
+			// we are not in combat. We are only obligated to do something here if a nearby ally is in combat and
+			// we can attack a soldier who is attacking them. Then we have to decide whether to move to attack such a soldier
+			// and if so which one. Actually, there is one other thing that is obligatory, which is to move to attack
+			// helpless enemies (buildings and constructing soldiers) if it is safe to do so.
+			MapLocation closestEnemySoldier = Util.closestNonConstructingSoldier(visibleEnemies, here);
+			if (closestEnemySoldier != null) {
+				// int numAlliesFighting = numOtherAlliedSoldiersInAttackRange(closestEnemySoldier);
+				// we deliberately include buildings in this count to encourage our soldiers to defend buildings:
+				int numAlliesFighting = numOtherAlliedSoldiersAndBuildingsInAttackRange(closestEnemySoldier);
+				if (numAlliesFighting > 0) {
+					// Approach this enemy if doing so would expose us to at most numAlliesFighting enemies.
+					int maxEnemyExposure = numAlliesFighting + 1;
+					if (tryMoveTowardLocationWithMaxEnemyExposure(closestEnemySoldier, maxEnemyExposure, Nav.Sneak.NO)) {
+						// Debug.indicate("micro", 0, "moving to support allies fighting closest enemy (max enemy exposure = " + numAlliesFighting + ")");
+						return true;
+					}
+				}
+			}
+
+			// If we didn't have to go help an ally, or were unable to, check if there is something nearby we can shoot.
+			// If so, shoot it. It must be a constructing solder or building because it's not a non-constructing soldier
+			if (attackableEnemies.length > 0) {
+				// Debug.indicate("micro", 0, "attacking a helpless enemy");
+				attackAHelplessEnemy();
+				return true;
+			}
+
+			// We didn't have to help an ally or shoot a helpless enemy. One final possibility with an obligatory response:
+			// if we can engage a helpless enemy and not get shot, do it
+			if (tryMoveToEngageUndefendedHelplessEnemy()) {
+				// Debug.indicate("micro", 0, "moving to engage a helpless enemy");
+				return true;
+			}
+
+			// If none of the above cases compelled us to action, there is no obligatory action
+			return false;
 		}
 	}
 
 	// @formatter:off
-	// Micro strategy:
-	//   Suppose we are in attack range of an enemy soldier. Then there are a few things we might
-	// want to do:
-	//   * Attack someone. Experiment with targeting based on num allies that can attack, vs lowest health
-	//   * Retreat. This is probably a good idea if and only if we are outnumbered. This requires figuring out a good
-	//     retreat square. Do this by figuring out which adjacent squares are attacked by enemies, and then going to 
-	//     the one with the fewest enemies. Break ties by number of nearby allies?
-	//   * Reposition. This could be good for setting up double-teams. For example, in a 2x2 if we waste 1 attack to
-	//     set up a double team, then we sacrifice 10 damage, but we'll kill an enemy 5 attacks sooner, saving ourself
-	//     50 damage. Maybe very worthwhile?
-	//
-	//   Suppose we are not in attack range of an enemy soldier, but we can see an enemy soldier. Then we need
-	// to decide whether to engage. Engaging first always exposes you to fire, except maybe in the special case where 
-	// the enemy has just moved diagonally and 3 rounds until he can attack. Then if you can engage with an orthogonal
-	// movement you get a 1-round head start and can win a 1v1.
-	//   Presumably we should never walk into a square from which more than 1 enemy can attack us. We should also think
-	// hard before engaging with a diagonal movement. 
-	//
-	//   The above is fairly cautious, and assumes we aren't desperate. Engaging first will always result in worse outcomes
-	// than letting the enemy engage first, all other things being equal. Sometimes we simply must attack, though--for example
-	// if we are losing on milk and need to kill pastrs. An opponent with bad micro may engage first but one with good
-	// good defensive micro will make us come to him. So we probably need several different micro strategies:
-    //
-	//   - DEFENSIVE: never engage first. Maybe be more willing to retreat?
-	//   - MEDIUM: engage 1v1, but never 1v2
-	//   - AGGRESSIVE: willing to enter 1v2s if enough allies are nearby and we have a decent chance of 
-	//                 overcoming the disadvantage of being the attacker.
-	//
-	//   Even a DEFENSIVE strategy is probably good enough to beat framework1-9noise, so let's try to write that first.
-	//
-	// In addition to the above considerations, we need to implement a system for telling nearby robots that can't see
-	// the enemies where the enemies are, and having those come in to attack.
-	//
-	// We may want a super simple Nav system for combat, that doesn't do any bug or anything and just does greedy movements
-	// On the other hand this would probably get super confused by combat across walls.
+//	private static void tmp() {
+//		MapLocation center = new MapLocation(0, 0);
+//		for (int ex = -3; ex <= +3; ex++) {
+//			System.out.print("{");
+//			for (int ey = -3; ey <= +3; ey++) {
+//				MapLocation enemyLoc = new MapLocation(ex, ey);
+//				ArrayList<Integer> attacked = new ArrayList<Integer>();
+//				for (int dir = 0; dir < 8; dir++) {
+//					MapLocation moveLoc = center.add(Direction.values()[dir]);
+//					if (moveLoc.isAdjacentTo(enemyLoc)) attacked.add(dir);
+//				}
+//				System.out.print("{");
+//				for (int i = 0; i < attacked.size(); i++) {
+//					System.out.print(attacked.get(i));
+//					if (i < attacked.size() - 1) System.out.print(",");
+//				}
+//				System.out.print("}");
+//				if (ey < +5) {
+//					System.out.print(",");
+//					int spaces = Math.min(16, 17 - 2 * attacked.size());
+//					for (int i = 0; i < spaces; i++)
+//						System.out.print(" ");
+//				}
+//			}
+//			System.out.println("}");
+//		}
+//	}
+	// selfDestructNotes[3+dx][3+dy] is a list of directions such that one move in that direction brings you adjacent to
+	// an enemy at (here.x + dx, here.y + dy)
+    private static final int[][][] selfDestructNotes = {{{},                {},                {},                {},                {},                {},                {},                },
+                                                        {{},                {7},               {6,7},             {5,6,7},           {5,6},             {5},               {},                },
+                                                        {{},                {0,7},             {0,6},             {0,4,5,7},         {4,6},             {4,5},             {},                },
+                                                        {{},                {0,1,7},           {1,2,6,7},         {0,1,2,3,4,5,6,7}, {2,3,5,6},         {3,4,5},           {},                },
+                                                        {{},                {0,1},             {0,2},             {0,1,3,4},         {2,4},             {3,4},             {},                },
+                                                        {{},                {1},               {1,2},             {1,2,3},           {2,3},             {3},               {},                },
+                                                        {{},                {},                {},                {},                {},                {},                {},                }};
 	// @formatter:on
 
-	// Notes:
-	// attack range is 10
-	// vision range is 35
-	// range of squares we could attack after one orthogonal movement is 16
-	// (so 10 < range <= 16 means we can't attack now, but could after one orthogonal movement)
-
-	// fight() should be called as a result of being forced into combat.
-	// After fight(), don't do anything except return.
-	private void fight() throws GameActionException {
-		// Debug.indicate("micro", 0, String.format("numVisibleEnemies = %d; numAttackableEnemies = %d", visibleEnemies.length, attackableEnemies.length));
-
-		if (attackableEnemies.length != 0) { // There is at least one enemy in attack range (which should hopefully not be their HQ)
-			int numAttackableSoldiers = Util.countSoldiers(attackableEnemies);
-			if (numAttackableSoldiers >= 1) {
-				if (stance == MicroStance.HARRASS) {
-					retreatOrFight();
-					return;
-				} else {
-					// Decide whether to attack, retreat, or reposition
-					if (numAttackableSoldiers >= 2) { // We're getting double-teamed!!
-						// retreat unless one of our attackers is also getting double-teamed just as bad
-						boolean anEnemyIsDoubleTeamed = false;
-						for (int i = attackableEnemies.length; i-- > 0;) {
-							if (attackableEnemies[i].type != RobotType.SOLDIER) continue; // don't care if non-soldier enemies are double-teamed
-							MapLocation enemyLoc = attackableEnemies[i].location;
-							// TODO: count of allies should really only count soldiers
-							anEnemyIsDoubleTeamed |= numOtherAlliedSoldiersInAttackRange(enemyLoc) >= 1;
-							if (anEnemyIsDoubleTeamed) break;
-						}
-						if (anEnemyIsDoubleTeamed) { // Fight!
-							// Debug.indicate("micro", 1, "double-teamed, but so is an enemy: fighting");
-							attackASoldier();
-							return;
-						} else { // no enemy is double-teamed. Retreat!
-							// Debug.indicate("micro", 1, "double-teamed: retreating");
-							retreatOrFight();
-							return;
-						}
-					} else { // We're not getting double-teamed. We're within attack range of exactly one soldier
-						// Fight on if we are winning the 1v1 or if the other guy is double-teamed. Otherwise retreat
-						// But if we are in aggressive mode, never retreat!
-						// First find the single enemy
-						RobotInfo enemySoldier = findASoldier(attackableEnemies);
-						// TODO: count of allies should really only count soldiers
-						if (stance == MicroStance.AGGRESSIVE || enemySoldier.health <= rc.getHealth() || enemySoldier.constructingRounds > 0
-								|| numOtherAlliedSoldiersInAttackRange(enemySoldier.location) >= 1) {
-							// Kill him!
-							// Debug.indicate("micro", 1, "winning vs single enemy: fighting");
-							attackAndRecord(enemySoldier);
-							return;
-						} else {
-							// retreat!
-							// Debug.indicate("micro", 1, "losing vs single enemy: retreating (numOtherAllies in range of " + enemySoldier.location.toString()
-							// + ") is " + numOtherAlliedSoldiersInAttackRange(enemySoldier.location));
-							retreatOrFight();
-							return;
-						}
-					}
-				}
-			} else { // can't attack a soldier
-				boolean canSeeSoldier = Util.countSoldiers(visibleEnemies) > 0;
-				if (canSeeSoldier) {
-					// handle the case when we can attack a building, but can see a soldier.
-					// Need to decide whether to move to attack a soldier or attack the building
-					// For the moment, let's just attack a building.
-					// TODO: add some code that makes us move to support allies when appropriate
-					MapLocation closestSoldier = Util.closestSoldier(visibleEnemies, here);
-
-					int numAlliesFightingClosestEnemySoldier = numOtherAlliedSoldiersInAttackRange(closestSoldier);
-					if (numAlliesFightingClosestEnemySoldier > 0) {
-						// We deliberately count allied buildings below so that we are more aggressively about engaging enemies who attack our buildings
-						int maxEnemyExposure = numAlliesFightingClosestEnemySoldier;
-						if (stance == MicroStance.AGGRESSIVE && maxEnemyExposure > 0) maxEnemyExposure++;
-						cautiouslyApproachVisibleEnemySoldier(closestSoldier, maxEnemyExposure);
-						if (!rc.isActive()) return;
-					}
-					// Debug.indicate("micro", 1, "can see a soldier, but preferring to attack a building");
-					attackABuilding();
-					return;
-				} else {
-					// Can't see any soldiers, but can attack a building. Do it
-					// Debug.indicate("micro", 1, "can't see a soldier; attacking a building");
-					attackABuilding();
-					return;
-				}
-			}
-		} else { // No attackable enemies! But there is at least one visible enemy
-			int numVisibleEnemySoldiers = Util.countSoldiers(visibleEnemies);
-			if (numVisibleEnemySoldiers > 0) {
-				// No enemy is currently in attack range. We can see at least one soldier.
-				// There are a few things we have to think about doing here.
-				// * If no combat is going on, then what happens depends on our current plans:
-				// - If we are moving to attack some point, then we should wait until we have a reasonable number of
-				// allies nearby and then attack. Ideally we should do a coordinated attack so that individual
-				// robots don't plunge in on their own and die.
-				// - If we had a non-attack destination we were going to, we should continue on to that. Doing
-				// that safely will require the Nav system to avoid squares attacked by enemies.
-				// - If we are defending some point then maybe we can continue what we were doing, as long as we don't
-				// walk into the enemy, or maybe a good reaction would be to bunch up with nearby allies
-				// * If combat is going on, then we need to decide whether to join in, and how to join in.
-				// Something that we particularly want to avoid is jumping in to help an ally just as that ally decides to retreat
-				//
-				// For now we are just going to stand off and move towards the nearest enemy as long as we don't engage.
-				// TODO: we can safely engage single robots with large enough actionDelay if we do it orthogonally
-				MapLocation closestSoldier = Util.closestSoldier(visibleEnemies, here);
-				// We deliberately count allied buildings below so that we are more aggressively about engaging enemies who attack our buildings
-				int maxEnemyExposure = numOtherAlliedUnitsInAttackRange(closestSoldier);
-				if (stance == MicroStance.AGGRESSIVE && maxEnemyExposure > 0) maxEnemyExposure++;
-				cautiouslyApproachVisibleEnemySoldier(closestSoldier, maxEnemyExposure);
-				if (rc.isActive() && stance == MicroStance.HARRASS) {
-					harrassToward(closestSoldier);
-					return;
-				}
-				return;
-			} else { // Can't see a soldier, only buildings.
-				// Make sure we aren't just seeing the HQ
-				boolean canSeeBuilding = visibleEnemies.length > 2 || visibleEnemies[0].type != RobotType.HQ;
-				if (canSeeBuilding) { // can see a non-HQ building
-					// We are not really fighting. Move toward the building so we eventually kill it
-					MapLocation closestBuilding = Util.closestNonHQ(visibleEnemies, rc);
-					Direction toBuilding = here.directionTo(closestBuilding);
-					int[] offsets = new int[] { 0, 1, -1, 2, -2, 3, -3, 4 };
-					for (int i = 0; i < offsets.length; i++) {
-						Direction tryDir = Direction.values()[(toBuilding.ordinal() + offsets[i] + 8) % 8];
-						if (rc.canMove(tryDir) && !Util.inHQAttackRange(here.add(tryDir), theirHQ)) {
-							// Debug.indicate("micro", 1, "moving towards visible building");
-							rc.move(tryDir);
-							return;
-						}
-					}
-					// Debug.indicate("micro", 1, "ignoring visible building because somehow we can't move");
-					return;
-				} else { // can only see the enemy HQ.
-					// we are not really fighting. Let's move away from it so we can say we did something
-					// Debug.indicate("micro", 1, "can only see enemy HQ");
-					Direction away = theirHQ.directionTo(here);
-					if (rc.canMove(away)) rc.move(away);
-					return;
-				}
+	private static boolean tryMoveForSelfDestruct(double requiredDamage) throws GameActionException {
+		double maxDamage = GameConstants.SELF_DESTRUCT_BASE_DAMAGE + GameConstants.SELF_DESTRUCT_DAMAGE_FACTOR * rc.getHealth();
+		double[] moveScores = new double[8];
+		for (RobotInfo info : attackableEnemies) {
+			double score = Math.min(maxDamage, info.health);
+			int[] moves = selfDestructNotes[3 + info.location.x - here.x][3 + info.location.y - here.y];
+			for (int dir : moves) {
+				moveScores[dir] += score;
 			}
 		}
+		double bestScore = requiredDamage;
+		int bestDir = -1;
+		Direction[] dirs = Direction.values();
+		for (int i = 8; i-- > 0;) {
+			if (moveScores[i] > bestScore && rc.canMove(dirs[i])) {
+				bestScore = moveScores[i];
+				bestDir = i;
+			}
+		}
+		if (bestDir != -1) {
+			if (rc.senseNearbyGameObjects(Robot.class, here.add(dirs[bestDir]), 2, us).length == 0) {
+				rc.move(dirs[bestDir]);
+				return true;
+			}
+		}
+		return false;
 	}
 
-	private void cautiouslyApproachVisibleEnemySoldier(MapLocation enemySoldier, int maxEnemyExposure) throws GameActionException {
+	private static boolean tryMoveToEngageUndefendedHelplessEnemy() throws GameActionException {
+		visibleEnemyLoop: for (int i = visibleEnemies.length; i-- > 0;) {
+			RobotInfo enemy = visibleEnemies[i];
+			if (Util.isHelpless(enemy)) {
+				MapLocation enemyLocation = enemy.location;
+				// Debug.indicate("micro", 1, "see helpless enemy at " + enemyLocation.toString());
+				Direction toEnemyDir = here.directionTo(enemyLocation);
+				if (!rc.canMove(toEnemyDir)) continue visibleEnemyLoop;
+				MapLocation pathLoc = here;
+				while (pathLoc.distanceSquaredTo(enemyLocation) > RobotType.SOLDIER.attackRadiusMaxSquared) {
+					pathLoc = pathLoc.add(pathLoc.directionTo(enemyLocation));
+					if (rc.senseTerrainTile(pathLoc) == TerrainTile.VOID) continue visibleEnemyLoop;
+					if (isInTheirHQAttackRange(pathLoc)) continue visibleEnemyLoop;
+					Robot[] enemyRobotsAlongPath = rc.senseNearbyGameObjects(Robot.class, pathLoc, RobotType.SOLDIER.attackRadiusMaxSquared, them);
+					if (Util.containsNonConstructingSoldier(enemyRobotsAlongPath, rc)) continue visibleEnemyLoop;
+				}
+
+				// the direct path to attack this helpless enemy is free of enemy soldiers. start moving along it
+				rc.move(toEnemyDir);
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private static boolean tryMoveTowardLocationWithMaxEnemyExposure(MapLocation dest, int maxEnemyExposure, Nav.Sneak sneak) throws GameActionException {
 		int[] numEnemiesAttackingDirs = countNumEnemiesAttackingMoveDirs();
 
-		Direction toEnemy = here.directionTo(enemySoldier);
+		Direction toEnemy = here.directionTo(dest);
 		Direction[] tryDirs = new Direction[] { toEnemy, toEnemy.rotateLeft(), toEnemy.rotateRight() };
 		for (int i = 0; i < tryDirs.length; i++) {
 			Direction tryDir = tryDirs[i];
 			if (!rc.canMove(tryDir)) continue;
 			if (numEnemiesAttackingDirs[tryDir.ordinal()] > maxEnemyExposure) continue;
-			if (Util.inHQAttackRange(here.add(tryDir), theirHQ)) continue;
-			// Debug.indicate("micro", 1, String.format("cautiously approaching enemy soldier; direction %d; attackers = %d %d %d %d %d %d %d %d",
-			// tryDir.ordinal(), numEnemiesAttackingDirs[0], numEnemiesAttackingDirs[1], numEnemiesAttackingDirs[2], numEnemiesAttackingDirs[3],
-			// numEnemiesAttackingDirs[4], numEnemiesAttackingDirs[5], numEnemiesAttackingDirs[6], numEnemiesAttackingDirs[7]));
-			rc.move(tryDir);
-			return;
+			if (isInTheirHQAttackRange(here.add(tryDir))) continue;
+			// Debug.indicate("micro", 1, String.format("moving toward %s with max enemy exposure %d (actual exposure %d)", dest.toString(), maxEnemyExposure,
+			// numEnemiesAttackingDirs[tryDir.ordinal()]));
+			if (sneak == Nav.Sneak.YES) rc.move(tryDir);
+			else rc.sneak(tryDir);
+			return true;
 		}
-		// Debug.indicate("micro", 1, "can't safely approach enemy soldier");
+		// Debug.indicate("micro", 1, String.format("can't move toward %s with max enemy exposure %d", dest.toString(), maxEnemyExposure));
+		return false;
 	}
 
-	private void harrassTheirHQ() throws GameActionException {
-		harrassToward(theirHQ);
-	}
-
-	private void harrassToward(MapLocation enemySoldier) throws GameActionException {
-		Direction toEnemy = here.directionTo(enemySoldier);
-
-		boolean closerToTheirHQ = here.distanceSquaredTo(theirHQ) < here.distanceSquaredTo(ourHQ);
-		if (closerToTheirHQ) {
-			if (tryToKillCows()) return;
-		}
-
-		if (closerToTheirHQ && FastRandom.randInt(4) == 0 && numOtherAlliedSoldiersInRange(here.add(toEnemy, 2), 1) == 0) {
-			rc.attackSquare(here.add(toEnemy, 2));
-			return;
-		}
-
-		int[] numEnemiesAttackingDirs = countNumEnemiesAttackingMoveDirs();
-
-		Direction[] tryDirs;
-		Robot[] alliedRobots = rc.senseNearbyGameObjects(Robot.class, here, RobotType.SOLDIER.sensorRadiusSquared, us);
-		RobotInfo[] allies = Util.senseAllInfos(alliedRobots, rc);
-		MapLocation closestAlly = Util.closest(allies, here);
-		if (closestAlly == null) {
-			tryDirs = new Direction[] { toEnemy, toEnemy.rotateLeft(), toEnemy.rotateRight(), toEnemy.rotateLeft().rotateLeft(),
-					toEnemy.rotateRight().rotateRight(), toEnemy.rotateLeft().rotateLeft().rotateLeft(), toEnemy.rotateRight().rotateRight().rotateRight() };
-		} else {
-			Direction repel = closestAlly.directionTo(here);
-			tryDirs = new Direction[] { repel, repel, repel, repel, toEnemy, toEnemy.rotateLeft(), toEnemy.rotateRight(), toEnemy.rotateLeft().rotateLeft(),
-					toEnemy.rotateRight().rotateRight(), toEnemy.rotateLeft().rotateLeft().rotateLeft(), toEnemy.rotateRight().rotateRight().rotateRight() };
-		}
-		for (int t = 0; t < 3; t++) {
-			int i = FastRandom.randInt(tryDirs.length);
-			Direction tryDir = tryDirs[i];
-			if (!rc.canMove(tryDir)) continue;
-			if (numEnemiesAttackingDirs[tryDir.ordinal()] > 0) continue;
-			if (Util.inHQAttackRange(here.add(tryDir), theirHQ)) continue;
-			// Debug.indicate("micro", 1, String.format("harassing enemy soldier; direction %d; attackers = %d %d %d %d %d %d %d %d", tryDir.ordinal(),
-			// numEnemiesAttackingDirs[0], numEnemiesAttackingDirs[1], numEnemiesAttackingDirs[2], numEnemiesAttackingDirs[3], numEnemiesAttackingDirs[4],
-			// numEnemiesAttackingDirs[5], numEnemiesAttackingDirs[6], numEnemiesAttackingDirs[7]));
-			rc.move(tryDir);
-			return;
-		}
-		if (closerToTheirHQ) rc.attackSquare(here.add(toEnemy, 2));
-		// Debug.indicate("micro", 1, "can't safely approach enemy soldier");
-	}
-
-	int[] shootX = new int[] { -1, 0, 1, -2, -1, 0, 1, 2, -2, -1, 1, 2, -2, -1, 0, 1, 2, -1, 0, 1 };
-	int[] shootY = new int[] { 2, 2, 2, 1, 1, 1, 1, 1, 0, 0, 0, 0, -1, -1, -1, -1, -1, -2, -2, -2 };
-
-	private boolean tryToKillCows() throws GameActionException {
+	// Costs ~1k bytecodes :(
+	private static boolean tryToKillCows() throws GameActionException {
 		MapLocation bestTarget = null;
-		double mostCows = -1;
-		for (int i = shootX.length; i-- > 0;) {
-			MapLocation target = here.add(shootX[i], shootY[i]);
-			double cows = rc.senseCowsAtLocation(target);
-			if (cows > mostCows) {
-				if (numOtherAlliedSoldiersInRange(target, 1) == 0) {
+		double mostCows = 300;
+		MapLocation[] shootLocs = MapLocation.getAllMapLocationsWithinRadiusSq(here, RobotType.SOLDIER.attackRadiusMaxSquared);
+		for (int i = shootLocs.length; i-- > 0;) { // 4 per loop
+			double cows = rc.senseCowsAtLocation(shootLocs[i]); // 14
+			if (cows > mostCows) { // 4
+				MapLocation target = shootLocs[i];
+				if (target.equals(here)) continue;
+				if (cows > 3000 || rc.senseNearbyGameObjects(Robot.class, target, 0, us).length == 0) {
 					mostCows = cows;
 					bestTarget = target;
 				}
 			}
 		}
-		// Debug.indicate("micro", 2, "trying to kill cows: mostCows = " + mostCows + " at " + (bestTarget == null ? "null" : bestTarget.toString()));
-		if (mostCows > 300) {
+		if (bestTarget != null) {
 			rc.attackSquare(bestTarget);
 			return true;
 		} else {
@@ -544,11 +547,15 @@ public class BotSoldier extends Bot {
 		}
 	}
 
-	private int numOtherAlliedSoldiersInAttackRange(MapLocation loc) throws GameActionException {
+	private static int numOtherAlliedSoldiersAndBuildingsInAttackRange(MapLocation loc) {
+		return rc.senseNearbyGameObjects(Robot.class, loc, RobotType.SOLDIER.attackRadiusMaxSquared, us).length;
+	}
+
+	private static int numOtherAlliedSoldiersInAttackRange(MapLocation loc) throws GameActionException {
 		return numOtherAlliedSoldiersInRange(loc, RobotType.SOLDIER.attackRadiusMaxSquared);
 	}
 
-	private int numOtherAlliedSoldiersInRange(MapLocation loc, int rangeSq) throws GameActionException {
+	private static int numOtherAlliedSoldiersInRange(MapLocation loc, int rangeSq) throws GameActionException {
 		int numAlliedSoldiers = 0;
 		Robot[] allies = rc.senseNearbyGameObjects(Robot.class, loc, rangeSq, us);
 		for (int i = allies.length; i-- > 0;) {
@@ -557,79 +564,50 @@ public class BotSoldier extends Bot {
 		return numAlliedSoldiers;
 	}
 
-	// Includes buildings!
-	private int numOtherAlliedUnitsInAttackRange(MapLocation loc) throws GameActionException {
-		return numOtherAlliedUnitsInRange(loc, RobotType.SOLDIER.attackRadiusMaxSquared);
-	}
-
-	// Includes buildings!
-	private int numOtherAlliedUnitsInRange(MapLocation loc, int rangeSq) throws GameActionException {
-		Robot[] allies = rc.senseNearbyGameObjects(Robot.class, loc, rangeSq, us);
-		return allies.length;
-	}
-
-	private RobotInfo findASoldier(RobotInfo[] infos) {
-		for (int i = infos.length; i-- > 0;) {
-			if (infos[i].type == RobotType.SOLDIER) {
-				return infos[i];
-			}
-		}
-		return null; // should never happen
-	}
-
-	// Assumes attackableEnemies contains a soldier
-	private void attackASoldier() throws GameActionException {
-		RobotInfo target = chooseSoldierAttackTarget(attackableEnemies);
+	// Assumes attackableEnemies contains a non-constructing soldier
+	private static void attackANonConstructingSoldier() throws GameActionException {
+		RobotInfo target = chooseNonConstructingSoldierAttackTarget(attackableEnemies);
 		attackAndRecord(target);
 	}
 
-	// Assumes enemies list contains at least one soldier!
-	// TODO: focus on robots with constructingRounds == 0? This seems like a rare case and maybe not worth it
-	private RobotInfo chooseSoldierAttackTarget(RobotInfo[] enemies) throws GameActionException {
+	private static RobotInfo chooseNonConstructingSoldierAttackTarget(RobotInfo[] enemies) throws GameActionException {
 		RobotInfo ret = null;
-		double bestNumNearbyAllies = -1;
-		double bestHealth = 999999;
-		double bestActionDelay = 999999;
+		double bestTurnsToKill = 999;
+		double bestActionDelay = 999;
 		for (int i = enemies.length; i-- > 0;) {
 			RobotInfo info = enemies[i];
-			if (info.type != RobotType.SOLDIER) continue;
-			MapLocation enemyLoc = info.location;
-			int numNearbyAllies = numOtherAlliedSoldiersInAttackRange(enemyLoc);
-			if (numNearbyAllies > bestNumNearbyAllies) {
-				bestNumNearbyAllies = numNearbyAllies;
-				bestHealth = info.health;
+			if (info.type != RobotType.SOLDIER || info.isConstructing) continue;
+			int numNearbyAllies = 1 + numOtherAlliedSoldiersInAttackRange(info.location);
+			double turnsToKill = info.health / numNearbyAllies;
+			if (turnsToKill < bestTurnsToKill) {
+				bestTurnsToKill = turnsToKill;
 				bestActionDelay = info.actionDelay;
 				ret = info;
-			} else if (numNearbyAllies == bestNumNearbyAllies) {
-				double health = info.health;
-				if (health < bestHealth) {
-					bestHealth = health;
-					bestActionDelay = info.actionDelay;
+			} else if (turnsToKill == bestTurnsToKill) {
+				double actionDelay = info.actionDelay;
+				if (actionDelay < bestActionDelay) {
+					bestActionDelay = actionDelay;
 					ret = info;
-				} else if (health == bestHealth) {
-					double actionDelay = info.actionDelay;
-					if (actionDelay < bestActionDelay) {
-						bestActionDelay = actionDelay;
-						ret = info;
-					}
 				}
 			}
 		}
+		// Debug.indicate("micro", 2, "chooseNonConstructingSoldierAttackTarget: target = " + ret.location.toString() + ", bestTurnsToKill = " +
+		// bestTurnsToKill);
 		return ret;
 	}
 
-	// Assumes attackableEnemies contains a pastr or noise tower
-	private void attackABuilding() throws GameActionException {
-		RobotInfo target = chooseBuildingAttackTarget();
+	// Assumes attackableEnemies is non-empty and only contains helpless enemies
+	private static void attackAHelplessEnemy() throws GameActionException {
+		RobotInfo target = chooseHelplessAttackTarget();
 		attackAndRecord(target);
 	}
 
-	// If we can only attack buildings, this function decides which one to attack.
-	// It assumes that the enemies list does not contain any SOLDIERs or HQs!
-	private RobotInfo chooseBuildingAttackTarget() throws GameActionException {
+	// If we can only attack buildings or constructing soldiers, this function decides which one to attack.
+	// It assumes that the enemies list does not contain any non-constructing soldiers or HQs!
+	private static RobotInfo chooseHelplessAttackTarget() throws GameActionException {
 		RobotInfo ret = null;
 		double bestHealth = 999999;
-		RobotType bestType = RobotType.NOISETOWER;
+		RobotType bestType = RobotType.SOLDIER;
 		for (int i = attackableEnemies.length; i-- > 0;) {
 			RobotInfo info = attackableEnemies[i];
 			RobotType type = info.type;
@@ -639,7 +617,7 @@ public class BotSoldier extends Bot {
 					bestHealth = health;
 					ret = info;
 				}
-			} else if (type == RobotType.PASTR && bestType == RobotType.NOISETOWER) {
+			} else if (type == RobotType.PASTR || bestType == RobotType.SOLDIER) { // prefer pastrs to noise towers to constructing soldiers
 				bestType = type;
 				bestHealth = info.health;
 				ret = info;
@@ -648,28 +626,35 @@ public class BotSoldier extends Bot {
 		return ret;
 	}
 
-	private void retreatOrFight() throws GameActionException {
+	private static void retreatOrFight() throws GameActionException {
 		// If all our opponents have really high action delay, we can fire a last shot
 		// and still be able to move before they can return fire. This would most probably
 		// happen if an enemy engaged us after several diagonal moves. This could turn
-		// a losing 1v1 into a winning one!
-		boolean fireOneLastShot = true;
+		// a losing 1v1 into a winning one! Also, if we can one-hit an enemy we should
+		// do so instead of retreating even if we take hits to do so
+		boolean canOneHitEnemy = false;
+		boolean enemyCanShootAtUs = false;
 		for (int i = attackableEnemies.length; i-- > 0;) {
-			fireOneLastShot &= attackableEnemies[i].actionDelay >= 3 || attackableEnemies[i].constructingRounds > 0;
-			if (!fireOneLastShot) break;
+			RobotInfo enemy = attackableEnemies[i];
+			if (enemy.health <= RobotType.SOLDIER.attackPower) {
+				canOneHitEnemy = true;
+				break;
+			}
+			if (enemy.actionDelay < 3.0 && !enemy.isConstructing) {
+				enemyCanShootAtUs = true;
+			}
 		}
 
-		if (fireOneLastShot) {
-			// Debug.indicate("micro", 2, "parthian shot");
-			attackASoldier();
+		if (canOneHitEnemy || !enemyCanShootAtUs) {
+			// Debug.indicate("micro", 2, "parthian shot (canOneHitEnemy = " + canOneHitEnemy + ", enemyCanShootAtUs = " + enemyCanShootAtUs + ")");
+			attackANonConstructingSoldier();
 			return;
 		}
 
 		Direction dir = chooseRetreatDirection();
 		if (dir == null) { // Can't retreat! Fight!
 			// Debug.indicate("micro", 2, "couldn't retreat; fighting instead");
-			RobotInfo target = chooseSoldierAttackTarget(attackableEnemies);
-			attackAndRecord(target);
+			attackANonConstructingSoldier();
 		} else { // Can retreat. Do it!
 			// Debug.indicate("micro", 2, "retreating successfully");
 			rc.move(dir);
@@ -719,24 +704,27 @@ public class BotSoldier extends Bot {
                                             {{},                {},                {},                {},                {},                {},                {},                {},                {},                {},                {}}};
    	// @formatter:on
 
-	private int[] countNumEnemiesAttackingMoveDirs() {
+	private static int[] countNumEnemiesAttackingMoveDirs() {
+		if (cachedNumEnemiesAttackingMoveDirs != null) return cachedNumEnemiesAttackingMoveDirs;
+
+		Debug.debug_bytecodes("before countAttackingDirs");
 		int[] numEnemiesAttackingDir = new int[8];
 		for (int i = visibleEnemies.length; i-- > 0;) {
 			RobotInfo info = visibleEnemies[i];
-			if (info.type == RobotType.SOLDIER && info.constructingRounds == 0) {
-				MapLocation enemyLoc = visibleEnemies[i].location;
+			if (info.type == RobotType.SOLDIER && !info.isConstructing) {
+				MapLocation enemyLoc = info.location;
 				int[] attackedDirs = attackNotes[5 + enemyLoc.x - here.x][5 + enemyLoc.y - here.y];
 				for (int j = attackedDirs.length; j-- > 0;) {
 					numEnemiesAttackingDir[attackedDirs[j]]++;
 				}
 			}
 		}
+		Debug.debug_bytecodes("after countAttackingDirs");
+		cachedNumEnemiesAttackingMoveDirs = numEnemiesAttackingDir;
 		return numEnemiesAttackingDir;
 	}
 
-	private Direction chooseRetreatDirection() throws GameActionException {
-		int[] numEnemiesAttackingDir = countNumEnemiesAttackingMoveDirs();
-
+	private static Direction chooseRetreatDirection() throws GameActionException {
 		int repelX = 0;
 		int repelY = 0;
 		for (int i = visibleEnemies.length; i-- > 0;) {
@@ -762,29 +750,43 @@ public class BotSoldier extends Bot {
 		// (a) we have to be able to move in that direction
 		// (b) moving in that direction has to take us out of range of enemy attacks
 		// (c) moving in that direction can't take us within range of the enemy HQ
+		int bestMinEnemyDistSq = 999999;
+		for (int j = visibleEnemies.length; j-- > 0;) {
+			int enemyDistSq = here.distanceSquaredTo(visibleEnemies[j].location);
+			if (enemyDistSq < bestMinEnemyDistSq) bestMinEnemyDistSq = enemyDistSq;
+		}
+		Direction bestDir = null;
 		int[] tryDirs = new int[] { 0, 1, -1, 2, -2, 3, -3, 4 };
 		for (int i = 0; i < tryDirs.length; i++) {
 			Direction tryDir = Direction.values()[(retreatDir.ordinal() + tryDirs[i] + 8) % 8];
 			if (!rc.canMove(tryDir)) continue;
 			MapLocation tryLoc = here.add(tryDir);
-			if (numEnemiesAttackingDir[tryDir.ordinal()] > 0) continue;
-			if (Util.inHQAttackRange(tryLoc, theirHQ)) continue;
-			return tryDir;
+			if (isInTheirHQAttackRange(tryLoc)) continue;
+
+			int minEnemyDistSq = 999999;
+			for (int j = visibleEnemies.length; j-- > 0;) {
+				int enemyDistSq = tryLoc.distanceSquaredTo(visibleEnemies[j].location);
+				if (enemyDistSq < minEnemyDistSq) minEnemyDistSq = enemyDistSq;
+			}
+			if (minEnemyDistSq > RobotType.SOLDIER.attackRadiusMaxSquared) return tryDir; // we can escape!!
+			if (minEnemyDistSq > bestMinEnemyDistSq) {
+				bestMinEnemyDistSq = minEnemyDistSq;
+				bestDir = tryDir;
+			}
 		}
 
-		return null;
+		return bestDir;
 	}
 
 	// If one of our pastrs is within our attack range and is about to die, kill it so that the
 	// other team doesn't get milk for it.
-	private boolean mercyKillPastrs() throws GameActionException {
-		Robot[] allies = rc.senseNearbyGameObjects(Robot.class, RobotType.SOLDIER.attackRadiusMaxSquared, us);
-		for (int i = allies.length; i-- > 0;) {
-			RobotInfo info = rc.senseRobotInfo(allies[i]);
-			if (info.type == RobotType.PASTR) {
-				Debug.indicate("mercy", 0, "pastr health = " + info.health);
-				if (info.health <= RobotType.SOLDIER.attackPower) {
-					rc.attackSquare(info.location);
+	private static boolean mercyKillPastrs() throws GameActionException {
+		MapLocation[] ourPastrs = rc.sensePastrLocations(us);
+		for (int i = ourPastrs.length; i-- > 0;) {
+			MapLocation pastrLoc = ourPastrs[i];
+			if (here.distanceSquaredTo(ourPastrs[i]) <= RobotType.SOLDIER.attackRadiusMaxSquared) {
+				if (rc.senseRobotInfo(rc.senseNearbyGameObjects(Robot.class, pastrLoc, 0, us)[0]).health <= RobotType.SOLDIER.attackPower) {
+					rc.attackSquare(pastrLoc);
 					return true;
 				}
 			}
@@ -792,9 +794,26 @@ public class BotSoldier extends Bot {
 		return false;
 	}
 
-	private void attackAndRecord(RobotInfo enemyInfo) throws GameActionException {
+	private static boolean weAreNearEnemyPastr() {
+		MapLocation[] enemyPastrs = rc.sensePastrLocations(them);
+		int smallestEnemyDistSq = 999999;
+		for (int i = enemyPastrs.length; i-- > 0;) {
+			int distSq = here.distanceSquaredTo(enemyPastrs[i]);
+			if (distSq < smallestEnemyDistSq) smallestEnemyDistSq = distSq;
+		}
+		if (smallestEnemyDistSq > 70) return false;
+		int smallestAllyDistSq = 999999;
+		for (int i = numPastrLocations; i-- > 0;) {
+			int distSq = here.distanceSquaredTo(bestPastrLocations[i]);
+			if (distSq < smallestAllyDistSq) smallestAllyDistSq = distSq;
+		}
+		return smallestEnemyDistSq < smallestAllyDistSq;
+	}
+
+	private static void attackAndRecord(RobotInfo enemyInfo) throws GameActionException {
 		if (enemyInfo == null) return; // should never happen, but just to be sure
 		rc.attackSquare(enemyInfo.location);
 		if (enemyInfo.health <= RobotType.SOLDIER.attackPower) MessageBoard.ROUND_KILL_COUNT.incrementInt();
 	}
+
 }

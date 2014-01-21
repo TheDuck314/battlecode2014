@@ -1,12 +1,53 @@
+Goldob = TooMuchSwagException
+ir0x539 = Maxwell Mann Tribute Band
 slightlyeskew = Battle Cattle
+nicketh = Proxy 2 Gate
 ryancheu = Proxy 2 Gate
 jianty_ = Armada
 slumerville = DoYouEvenMilk
+tfk1 = quotes
+
+team160 - 0xg
+   1/21 - camps your spawn!! This can actually be pretty effective! Except they don't yet go after your
+          pastrs or do anything else...
+
+team104 - The Simple Soldier
+   1/20: they are rushing (rallying to center and then attacking my pastr). This was quite effective against my
+         anatid19_noisepastr_stonewall, in part because of quite good selfdestruct micro. The other aspects of
+         their micro aren't as good but self-destruct seems very powerful.
+
+team160 - 0xg
+   1/19: eventually (sometimes) builds a pastr and then tries to defend it with a phalanx of
+         8 soldiers in the adjacent squares. Doesn't seem to build a noise tower. The defense isn't
+         very effective.
+
+team117 - Fragments of a Hologram Rose
+   1/21: I can still hold off his rush (barely) but only because he makes mistakes. I think
+         it's becoming clear that a well-implemented rush will beat a quick tower+pastr strat
+   1/19: he's imitating proxy's sprint strategy, with some success
+   HAS SOME REALLY COOL PATHFINDING: SEE GAME 752
+   with framework-1-9: they built all pastrs early, I punished them and won
+
+team121 - Team 7
+   1/18: they're rushing currently, it seems
 
 team052 - The Vegan Police
+   1/18: imitating proxy's sprint strategy I think. Their micro is better than anatid19_noisepastr_stonewall's, perhaps because
+         they use self-destructs effectively
    1/12: dangerous: beat my hq pastr strat with a better hq pastr implementation.
-         on bakedpotato his herding was better. on divide got better map control
+         on bakedpotato their herding was better. on divide got better map control
          since my guys always retreat, and built a second pastr
+
+team009 - Noob Status
+   1/19: DEFINITELY targeting my broadcasts!!
+   1/12: now uses hq pastr with pretty bad noise tower herding. my harrassers were effective
+   REALLY NICE BUG + ROAD HEURISTIC PATHFINDING. MAKES IT OBVIOUS THAT THE BFS IS SLOWING ME DOWN A LOT
+   NICE SOLDIER HERDING INTO CORNERS STRATEGY
+   with framework-1-9: (match 305) G#1: they built 2 pastrs in corners and used soldiers to herd into them
+                                        worked really well! I lost
+                                   G#2: he got confused b/c Reticle doesn't have corners, and I won
+                                   G#3: another open map; they herded into corners and won
+
 
 team133 - Proxy 2 Gate
    1/13: even more dangerous: Their soldiers sit outside my pastr and their 7th and 8th guys
@@ -32,6 +73,7 @@ team059 - cereBELLUM
          work well because I quickly kill those. My harrassers were effective
 
 team178 - @Deprecated
+   1/17: still using HQ NT, but NICE AGGRESSIVE MICRO: see game 2 of 4381
    1/13: was still using HQ noise tower. defeated especially handily by pastr build time finesse
    1/12: Used HQ noise tower. My harrassers were effective so my HQ noise tower won.
    1/9 or so: REALLY NICE ATTACK MICRO THAT ANNIHILATED ME WITH A RUSH
@@ -52,24 +94,9 @@ team018 - NP-Compete
    with circular herding, which is pretty fast and effect on the right maps.
    WOULD HAVE LOST TO THEM EXCEPT THEY DIDN'T KNOW ABOUT THE HQ BUG
 
-team117 - Fragments of a Hologram Rose
-   HAS SOME REALLY COOL PATHFINDING: SEE GAME 752
-   with framework-1-9: they built all pastrs early, I punished them and won
 
 team056 - baumteam
    with framework-1-9: they try to use soldiers to herd into pastrs next to HQ
                        they synchronize the herding of a bunch of soldier.
                        it didn't work well, so I won with a single well-placed pastr
 
-team225 - The Simple Soldier
-   with framework-1-9: they built too many pastrs, and I punished them and won
-
-
-team009 - Noob Status
-   1/12: now uses hq pastr with pretty bad noise tower herding. my harrassers were effective
-   REALLY NICE BUG + ROAD HEURISTIC PATHFINDING. MAKES IT OBVIOUS THAT THE BFS IS SLOWING ME DOWN A LOT
-   NICE SOLDIER HERDING INTO CORNERS STRATEGY
-   with framework-1-9: (match 305) G#1: they built 2 pastrs in corners and used soldiers to herd into them
-                                        worked really well! I lost
-                                   G#2: he got confused b/c Reticle doesn't have corners, and I won
-                                   G#3: another open map; they herded into corners and won

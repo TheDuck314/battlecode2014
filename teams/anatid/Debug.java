@@ -50,4 +50,12 @@ public class Debug {
 
 		System.out.println(String.format("timed %s: took %d bytecodes ( = %f turns)\n", message, totalBytecodes, totalBytecodes / (double) GameConstants.BYTECODE_LIMIT));
 	}
+	
+	public static void debug_bytecodes_init() {
+		Debug.indicate("bytecodes", 0, "");
+	}
+
+	public static void debug_bytecodes(String message) {
+		Debug.indicateAppend("bytecodes", 0, message + ": " + Clock.getBytecodeNum() + "; ");
+	}
 }
