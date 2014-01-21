@@ -14,35 +14,76 @@ public class BotNoiseTower extends Bot {
 			rc.yield();
 		}
 	}
-	
+
 	protected static void init(RobotController theRC) throws GameActionException {
 		Bot.init(theRC);
-//		Debug.init(theRC, "herd");
+		// Debug.init(theRC, "herd");
 
 		here = rc.getLocation();
-		
+
 		// claim the assignment to build this tower so others know not to build it
 		int numPastrLocations = MessageBoard.NUM_PASTR_LOCATIONS.readInt();
+		amSuppressor = true;
 		for (int i = 0; i < numPastrLocations; i++) {
 			MapLocation pastrLoc = MessageBoard.BEST_PASTR_LOCATIONS.readFromMapLocationList(i);
 			if (rc.getLocation().isAdjacentTo(pastrLoc)) {
+				amSuppressor = false;
 				MessageBoard.TOWER_BUILDER_ROBOT_IDS.claimAssignment(i);
 				break;
+			}
+		}
+
+		if (amSuppressor) {
+			int bestDistSq = 999999;
+			int numSuppressors = MessageBoard.NUM_SUPPRESSORS.readInt();
+			int suppressorIndex = -1;
+			for (int i = 0; i < numSuppressors; i++) {
+				MapLocation target = MessageBoard.SUPPRESSOR_TARGET_LOCATIONS.readFromMapLocationList(i);
+				int distSq = here.distanceSquaredTo(target);
+				if (distSq < bestDistSq) {
+					bestDistSq = distSq;
+					suppressionTarget = target;
+					suppressorIndex = i;
+				}
+			}
+			if (suppressorIndex != -1) {
+				MessageBoard.SUPPRESSOR_BUILDER_ROBOT_IDS.claimAssignment(suppressorIndex);
 			}
 		}
 	}
 
 	static MapLocation here;
 	static MapLocation pastr = null;
+	static boolean amSuppressor;
+	static MapLocation suppressionTarget;
 
 	private static void turn() throws GameActionException {
 		if (!rc.isActive()) return;
 
+		if (amSuppressor) {
+			MapLocation[] theirPastrs = rc.sensePastrLocations(them);
+			MapLocation closestEnemyPastr = Util.closest(theirPastrs, here);
+			if (closestEnemyPastr != null) {
+				if (rc.canAttackSquare(closestEnemyPastr)) {
+					rc.attackSquare(closestEnemyPastr);
+					return;
+				} else {
+					MapLocation closer = closestEnemyPastr.add(closestEnemyPastr.directionTo(here));
+					if (rc.canAttackSquare(closer)) {
+						rc.attackSquare(closer);
+						return;
+					}
+				}
+			}
+		}
+
 		pastr = findNearestAlliedPastr();
-		if (pastr == null || here.distanceSquaredTo(pastr) > RobotType.NOISETOWER.attackRadiusMaxSquared) pastr = here;
+		if (pastr == null || here.distanceSquaredTo(pastr) > RobotType.NOISETOWER.attackRadiusMaxSquared) {
+			pastr = here;
+		}
 
 		herdTowardPastrDumb();
-		// herdTowardPastrSmart2();
+		// herdTowardPastrSmart();
 	}
 
 	private static MapLocation findNearestAlliedPastr() {
@@ -52,9 +93,10 @@ public class BotNoiseTower extends Bot {
 
 	static final int maxOrthogonalRadius = (int) Math.sqrt(RobotType.NOISETOWER.attackRadiusMaxSquared);
 	static final int maxDiagonalRadius = (int) Math.sqrt(RobotType.NOISETOWER.attackRadiusMaxSquared / 2);
-	static Direction attackDir = Direction.NORTH_EAST;
+	static Direction attackDir = Direction.NORTH;
 	static int radius = attackDir.isDiagonal() ? maxDiagonalRadius : maxOrthogonalRadius;
-	static final int[] nextDumbHerdDir = new int[] { 2, 3, 4, 5, 6, 7, 1, 0 };
+	// static final int[] nextDumbHerdDir = new int[] { 2, 3, 4, 5, 6, 7, 1, 0 };
+	static final int[] nextDumbHerdDir = new int[] { 1, 2, 3, 4, 5, 6, 7, 0 };
 
 	private static void herdTowardPastrDumb() throws GameActionException {
 		MapLocation target = null;
@@ -66,7 +108,6 @@ public class BotNoiseTower extends Bot {
 
 			radius--;
 			if (radius <= (attackDir.isDiagonal() ? 3 : 5)) {
-				//attackDir = attackDir.rotateRight();
 				attackDir = Direction.values()[nextDumbHerdDir[attackDir.ordinal()]];
 				radius = attackDir.isDiagonal() ? maxDiagonalRadius : maxOrthogonalRadius;
 			}
@@ -80,19 +121,19 @@ public class BotNoiseTower extends Bot {
 		return loc.x < -W || loc.y < -W || loc.x >= rc.getMapWidth() + W || loc.y >= rc.getMapWidth() + W;
 	}
 
-	static MapLocation smart2Loc = null;
-	static Direction startDir = Direction.NORTH;
+	static MapLocation smartLoc = null;
+	static Direction nextStartDir = Direction.NORTH;
 
 	static int[] edgesX = new int[] { -2, -1, 0, 1, 2, -3, -2, 2, 3, -3, 3, -3, 3, -3, 3, -3, -2, 2, 3, -2, -1, 0, 1, 2 };
 	static int[] edgesY = new int[] { 3, 3, 3, 3, 3, 2, 2, 2, 2, 1, 1, 0, 0, -1, -1, -2, -2, -2, -2, -3, -3, -3, -3, -3 };
 	static int edgeTrimIndex = 0;
 
-	private static void herdTowardPastrSmart2() throws GameActionException {
-		if (smart2Loc == null || smart2Loc.distanceSquaredTo(pastr) <= GameConstants.PASTR_RANGE) {
-			smart2Loc = pastr.add(startDir, startDir.isDiagonal() ? maxDiagonalRadius - 3 : maxOrthogonalRadius - 3);
-			startDir = startDir.rotateRight();
+	private static void herdTowardPastrSmart() throws GameActionException {
+		if (smartLoc == null || smartLoc.distanceSquaredTo(pastr) <= GameConstants.PASTR_RANGE) {
+			smartLoc = pastr.add(nextStartDir, nextStartDir.isDiagonal() ? maxDiagonalRadius - 3 : maxOrthogonalRadius - 3);
+			nextStartDir = nextStartDir.rotateRight();
 			edgeTrimIndex = edgesX.length - 1;
-//			Debug.indicate("herd", 0, "starting new spoke");
+			// Debug.indicate("herd", 0, "starting new spoke");
 		}
 
 		while (edgeTrimIndex >= 0) {
@@ -107,25 +148,25 @@ public class BotNoiseTower extends Bot {
 			}
 		}
 
-		while (!rc.canAttackSquare(smart2Loc) || !isOnMap(smart2Loc)) {
-			Direction moveDir = smart2Loc.directionTo(pastr);
-			Direction computedMoveDir = HerdPattern.readHerdDir(smart2Loc, rc);
+		while (!rc.canAttackSquare(smartLoc) || !isOnMap(smartLoc)) {
+			Direction moveDir = smartLoc.directionTo(pastr);
+			Direction computedMoveDir = HerdPattern.readHerdDir(smartLoc, rc);
 			if (computedMoveDir != null) moveDir = computedMoveDir;
-			smart2Loc = smart2Loc.add(moveDir);
-			if (here.distanceSquaredTo(smart2Loc) > RobotType.NOISETOWER.attackRadiusMaxSquared) {
-				smart2Loc = null;
+			smartLoc = smartLoc.add(moveDir);
+			if (here.distanceSquaredTo(smartLoc) > RobotType.NOISETOWER.attackRadiusMaxSquared) {
+				smartLoc = null;
 				return;
 			}
-			if (smart2Loc.equals(pastr)) return; // otherwise in some situations we could get an infinite loop
+			if (smartLoc.equals(pastr)) return; // otherwise in some situations we could get an infinite loop
 		}
 
-		Direction herdDir = smart2Loc.directionTo(pastr);
-		Direction computedHerdDir = HerdPattern.readHerdDir(smart2Loc, rc);
+		Direction herdDir = smartLoc.directionTo(pastr);
+		Direction computedHerdDir = HerdPattern.readHerdDir(smartLoc, rc);
 		if (computedHerdDir != null) herdDir = computedHerdDir;
 
-		MapLocation targetSquare = smart2Loc.add(Util.opposite(herdDir), 3);
-//		Debug.indicate("herd", 2, "want to attack " + targetSquare.toString());
+		MapLocation targetSquare = smartLoc.add(Util.opposite(herdDir), 3);
+		// Debug.indicate("herd", 2, "want to attack " + targetSquare.toString());
 		if (rc.canAttackSquare(targetSquare)) rc.attackSquare(targetSquare);
-		smart2Loc = smart2Loc.add(herdDir);
+		smartLoc = smartLoc.add(herdDir);
 	}
 }

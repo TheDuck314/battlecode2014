@@ -1,5 +1,7 @@
 package anatid;
 
+import java.util.ArrayList;
+
 import battlecode.common.*;
 
 public class BotSoldier extends Bot {
@@ -25,6 +27,7 @@ public class BotSoldier extends Bot {
 
 		tryReceivePastrLocations();
 		tryClaimBuildAssignment();
+		tryClaimSuppressorAssignment();
 		// Debug.indicate("assign", 0, "after constructor, towerBuildAssignmentIndex = " + towerBuildAssignmentIndex + ", pastrBuildAssignmentIndex = "
 		// + pastrBuildAssignmentIndex);
 	}
@@ -41,6 +44,8 @@ public class BotSoldier extends Bot {
 	static int numNonConstructingSoldiersAttackingUs;
 	static int[] cachedNumEnemiesAttackingMoveDirs; // computed in doObligatoryMicro
 	static boolean fightIsWinning;
+	static boolean tryingSelfDestruct = false;
+	static boolean beVeryCautious = false;
 
 	static int spawnOrder;
 
@@ -48,13 +53,20 @@ public class BotSoldier extends Bot {
 	static MapLocation[] bestPastrLocations = new MapLocation[BotHQ.MAX_PASTR_LOCATIONS];
 	static int towerBuildAssignmentIndex = -1;
 	static int pastrBuildAssignmentIndex = -1;
+	static int suppressorBuildAssignmentIndex = -1;
 	static boolean isFirstTurn = true;
 
 	private static void turn() throws GameActionException {
 		Debug.debug_bytecodes_init();
 		here = rc.getLocation();
-
-		if (!rc.isActive()) return;
+		if (!rc.isActive()) {
+			// can self-destruct even with large actiondelay:
+			if (tryingSelfDestruct) {
+				updateEnemyData();
+				trySelfDestruct();
+			}
+			return;
+		}
 
 		if (Strategy.active == Strategy.UNDECIDED) {
 			Strategy.active = MessageBoard.STRATEGY.readStrategy();
@@ -71,6 +83,10 @@ public class BotSoldier extends Bot {
 		}
 
 		updateEnemyData();
+
+		if (tryingSelfDestruct) {
+			if (trySelfDestruct()) return;
+		}
 
 		if (visibleEnemies.length > 0 && rc.isActive()) {
 			doObligatoryMicro();
@@ -93,6 +109,9 @@ public class BotSoldier extends Bot {
 			if (pastrBuildAssignmentIndex != -1) {
 				if (!MessageBoard.PASTR_BUILDER_ROBOT_IDS.checkIfIOwnAssignment(pastrBuildAssignmentIndex)) pastrBuildAssignmentIndex = -1;
 			}
+			if (suppressorBuildAssignmentIndex != -1) {
+				if (!MessageBoard.SUPPRESSOR_BUILDER_ROBOT_IDS.checkIfIOwnAssignment(suppressorBuildAssignmentIndex)) suppressorBuildAssignmentIndex = -1;
+			}
 		}
 		isFirstTurn = false;
 
@@ -102,6 +121,12 @@ public class BotSoldier extends Bot {
 			// Debug.indicate("assign", 1, "going to pastr build location " + destIndex);
 			Nav.goTo(bestPastrLocations[destIndex], Nav.Sneak.NO, fightIsWinning ? Nav.Engage.YES : Nav.Engage.NO, countNumEnemiesAttackingMoveDirs());
 			return;
+		}
+
+		if (suppressorBuildAssignmentIndex != -1) {
+			MapLocation target = MessageBoard.SUPPRESSOR_TARGET_LOCATIONS.readFromMapLocationList(suppressorBuildAssignmentIndex);
+			if (tryBuildSuppressor(target)) return;
+			Nav.goTo(target, Nav.Sneak.NO, Nav.Engage.NO, countNumEnemiesAttackingMoveDirs());
 		}
 
 		MapLocation rallyLoc = MessageBoard.RALLY_LOC.readMapLocation();
@@ -143,7 +168,8 @@ public class BotSoldier extends Bot {
 			bestPastrLocations[i] = MessageBoard.BEST_PASTR_LOCATIONS.readFromMapLocationList(i);
 		}
 
-		if (Strategy.active == Strategy.ONE_PASTR || Strategy.active == Strategy.SCATTER) {
+		if (Strategy.active == Strategy.ONE_PASTR || Strategy.active == Strategy.ONE_PASTR_SUPPRESSOR || Strategy.active == Strategy.SCATTER
+				|| Strategy.active == Strategy.SCATTER_SUPPRESSOR) {
 			tryClaimBuildAssignment();
 		}
 		return true;
@@ -169,7 +195,19 @@ public class BotSoldier extends Bot {
 		}
 	}
 
+	private static void tryClaimSuppressorAssignment() throws GameActionException {
+		int numSuppressors = MessageBoard.NUM_SUPPRESSORS.readInt();
+		for (int i = 0; i < numSuppressors; i++) {
+			if (MessageBoard.SUPPRESSOR_BUILDER_ROBOT_IDS.checkIfAssignmentUnowned(i)) {
+				MessageBoard.SUPPRESSOR_BUILDER_ROBOT_IDS.claimAssignment(i);
+				suppressorBuildAssignmentIndex = i;
+			}
+		}
+	}
+
 	private static boolean tryBuildSomething() throws GameActionException {
+		if (1 + numOtherAlliedSoldiersInRange(here, RobotType.SOLDIER.sensorRadiusSquared) <= 2 * visibleEnemies.length) return false;
+
 		for (int i = 0; i < numPastrLocations; i++) {
 			MapLocation pastrLoc = bestPastrLocations[i];
 			if (here.equals(pastrLoc)) {
@@ -198,6 +236,19 @@ public class BotSoldier extends Bot {
 		return false;
 	}
 
+	private static boolean tryBuildSuppressor(MapLocation target) throws GameActionException {
+
+		if (here.distanceSquaredTo(target) <= RobotType.NOISETOWER.attackRadiusMaxSquared) {
+			if (1 + numOtherAlliedSoldiersInRange(here, RobotType.SOLDIER.sensorRadiusSquared) <= 2 * visibleEnemies.length) {
+				return true;
+			} else {
+				rc.construct(RobotType.NOISETOWER);
+				return true;
+			}
+		}
+		return false;
+	}
+
 	private static void constructNoiseTower(MapLocation pastrLoc) throws GameActionException {
 		rc.construct(RobotType.NOISETOWER);
 		HerdPattern.computeAndPublish(here, pastrLoc, rc);
@@ -210,7 +261,7 @@ public class BotSoldier extends Bot {
 		int numVisibleNonConstructingEnemySoldiers = 0;
 		for (int i = visibleEnemyRobots.length; i-- > 0;) {
 			visibleEnemies[i] = rc.senseRobotInfo(visibleEnemyRobots[i]);
-			if(visibleEnemies[i].type == RobotType.SOLDIER && !visibleEnemies[i].isConstructing) numVisibleNonConstructingEnemySoldiers++;
+			if (visibleEnemies[i].type == RobotType.SOLDIER && !visibleEnemies[i].isConstructing) numVisibleNonConstructingEnemySoldiers++;
 		}
 
 		numNonConstructingSoldiersAttackingUs = 0;
@@ -228,7 +279,7 @@ public class BotSoldier extends Bot {
 
 		// clear the cached value of this array at the beginning of each turn:
 		cachedNumEnemiesAttackingMoveDirs = null;
-		switch(numVisibleNonConstructingEnemySoldiers) {
+		switch (numVisibleNonConstructingEnemySoldiers) {
 			case 0:
 				fightIsWinning = true;
 				break;
@@ -242,9 +293,28 @@ public class BotSoldier extends Bot {
 				fightIsWinning = rc.senseNearbyGameObjects(Robot.class, here, 35, us).length >= 5;
 				break;
 			default:
-				fightIsWinning = rc.senseNearbyGameObjects(Robot.class, here, 35, us).length >= (int)(1.5 * numVisibleNonConstructingEnemySoldiers);
+				fightIsWinning = rc.senseNearbyGameObjects(Robot.class, here, 35, us).length >= (int) (1.5 * numVisibleNonConstructingEnemySoldiers);
 				break;
 		}
+	}
+
+	private static boolean trySelfDestruct() throws GameActionException {
+		double maxDamage = GameConstants.SELF_DESTRUCT_BASE_DAMAGE + GameConstants.SELF_DESTRUCT_DAMAGE_FACTOR * rc.getHealth();
+		double damageDealt = 0;
+		for (RobotInfo info : attackableEnemies) {
+			if (info.location.isAdjacentTo(here)) {
+				damageDealt += Math.min(info.health, maxDamage);
+			}
+		}
+		damageDealt -= maxDamage * rc.senseNearbyGameObjects(Robot.class, here, 2, us).length;
+		if (damageDealt > rc.getHealth() * 1.5
+				|| (damageDealt > rc.getHealth() && rc.getHealth() < 1.5 * RobotType.SOLDIER.attackPower * numNonConstructingSoldiersAttackingUs)) {
+			MessageBoard.SELF_DESTRUCT_LOCKOUT_ROUND.writeInt(Clock.getRoundNum() + 2);
+			MessageBoard.SELF_DESTRUCT_LOCKOUT_ID.writeInt(rc.getRobot().getID());
+			rc.selfDestruct();
+			return true;
+		}
+		return false;
 	}
 
 	private static boolean doVoluntaryDefensiveMicro(Nav.Sneak sneak) throws GameActionException {
@@ -256,6 +326,19 @@ public class BotSoldier extends Bot {
 	// obligatory micro is attacks or movements that we have to do because either we or a nearby ally is in combat
 	private static boolean doObligatoryMicro() throws GameActionException {
 		if (numNonConstructingSoldiersAttackingUs >= 1) {
+			if (rc.getHealth() > RobotType.SOLDIER.attackPower * numNonConstructingSoldiersAttackingUs) {
+				if (Clock.getRoundNum() >= MessageBoard.SELF_DESTRUCT_LOCKOUT_ROUND.readInt()
+						|| rc.getRobot().getID() == MessageBoard.SELF_DESTRUCT_LOCKOUT_ID.readInt()) {
+					double requiredSelfDestructDamage = rc.getHealth() * 1.5;
+					if (tryMoveForSelfDestruct(requiredSelfDestructDamage)) {
+						tryingSelfDestruct = true;
+						return true;
+					} else {
+						tryingSelfDestruct = false;
+					}
+				}
+			}
+
 			// we are in combat
 			// If we are getting double-teamed worse than any of the enemies we are fighting, try to retreat
 			int maxAlliesAttackingEnemy = 0;
@@ -300,7 +383,7 @@ public class BotSoldier extends Bot {
 				int numAlliesFighting = numOtherAlliedSoldiersAndBuildingsInAttackRange(closestEnemySoldier);
 				if (numAlliesFighting > 0) {
 					// Approach this enemy if doing so would expose us to at most numAlliesFighting enemies.
-					int maxEnemyExposure =  numAlliesFighting + 1;
+					int maxEnemyExposure = numAlliesFighting + 1;
 					if (tryMoveTowardLocationWithMaxEnemyExposure(closestEnemySoldier, maxEnemyExposure, Nav.Sneak.NO)) {
 						// Debug.indicate("micro", 0, "moving to support allies fighting closest enemy (max enemy exposure = " + numAlliesFighting + ")");
 						return true;
@@ -326,6 +409,73 @@ public class BotSoldier extends Bot {
 			// If none of the above cases compelled us to action, there is no obligatory action
 			return false;
 		}
+	}
+
+	// @formatter:off
+//	private static void tmp() {
+//		MapLocation center = new MapLocation(0, 0);
+//		for (int ex = -3; ex <= +3; ex++) {
+//			System.out.print("{");
+//			for (int ey = -3; ey <= +3; ey++) {
+//				MapLocation enemyLoc = new MapLocation(ex, ey);
+//				ArrayList<Integer> attacked = new ArrayList<Integer>();
+//				for (int dir = 0; dir < 8; dir++) {
+//					MapLocation moveLoc = center.add(Direction.values()[dir]);
+//					if (moveLoc.isAdjacentTo(enemyLoc)) attacked.add(dir);
+//				}
+//				System.out.print("{");
+//				for (int i = 0; i < attacked.size(); i++) {
+//					System.out.print(attacked.get(i));
+//					if (i < attacked.size() - 1) System.out.print(",");
+//				}
+//				System.out.print("}");
+//				if (ey < +5) {
+//					System.out.print(",");
+//					int spaces = Math.min(16, 17 - 2 * attacked.size());
+//					for (int i = 0; i < spaces; i++)
+//						System.out.print(" ");
+//				}
+//			}
+//			System.out.println("}");
+//		}
+//	}
+	// selfDestructNotes[3+dx][3+dy] is a list of directions such that one move in that direction brings you adjacent to
+	// an enemy at (here.x + dx, here.y + dy)
+    private static final int[][][] selfDestructNotes = {{{},                {},                {},                {},                {},                {},                {},                },
+                                                        {{},                {7},               {6,7},             {5,6,7},           {5,6},             {5},               {},                },
+                                                        {{},                {0,7},             {0,6},             {0,4,5,7},         {4,6},             {4,5},             {},                },
+                                                        {{},                {0,1,7},           {1,2,6,7},         {0,1,2,3,4,5,6,7}, {2,3,5,6},         {3,4,5},           {},                },
+                                                        {{},                {0,1},             {0,2},             {0,1,3,4},         {2,4},             {3,4},             {},                },
+                                                        {{},                {1},               {1,2},             {1,2,3},           {2,3},             {3},               {},                },
+                                                        {{},                {},                {},                {},                {},                {},                {},                }};
+	// @formatter:on
+
+	private static boolean tryMoveForSelfDestruct(double requiredDamage) throws GameActionException {
+		double maxDamage = GameConstants.SELF_DESTRUCT_BASE_DAMAGE + GameConstants.SELF_DESTRUCT_DAMAGE_FACTOR * rc.getHealth();
+		double[] moveScores = new double[8];
+		for (RobotInfo info : attackableEnemies) {
+			double score = Math.min(maxDamage, info.health);
+			int[] moves = selfDestructNotes[3 + info.location.x - here.x][3 + info.location.y - here.y];
+			for (int dir : moves) {
+				moveScores[dir] += score;
+			}
+		}
+		double bestScore = requiredDamage;
+		int bestDir = -1;
+		Direction[] dirs = Direction.values();
+		for (int i = 8; i-- > 0;) {
+			if (moveScores[i] > bestScore && rc.canMove(dirs[i])) {
+				bestScore = moveScores[i];
+				bestDir = i;
+			}
+		}
+		if (bestDir != -1) {
+			if (rc.senseNearbyGameObjects(Robot.class, here.add(dirs[bestDir]), 2, us).length == 0) {
+				rc.move(dirs[bestDir]);
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private static boolean tryMoveToEngageUndefendedHelplessEnemy() throws GameActionException {
@@ -555,8 +705,8 @@ public class BotSoldier extends Bot {
    	// @formatter:on
 
 	private static int[] countNumEnemiesAttackingMoveDirs() {
-		if(cachedNumEnemiesAttackingMoveDirs != null) return cachedNumEnemiesAttackingMoveDirs;
-		
+		if (cachedNumEnemiesAttackingMoveDirs != null) return cachedNumEnemiesAttackingMoveDirs;
+
 		Debug.debug_bytecodes("before countAttackingDirs");
 		int[] numEnemiesAttackingDir = new int[8];
 		for (int i = visibleEnemies.length; i-- > 0;) {
@@ -652,10 +802,9 @@ public class BotSoldier extends Bot {
 			if (distSq < smallestEnemyDistSq) smallestEnemyDistSq = distSq;
 		}
 		if (smallestEnemyDistSq > 70) return false;
-		MapLocation[] ourPastrs = rc.sensePastrLocations(us);
 		int smallestAllyDistSq = 999999;
-		for (int i = ourPastrs.length; i-- > 0;) {
-			int distSq = here.distanceSquaredTo(ourPastrs[i]);
+		for (int i = numPastrLocations; i-- > 0;) {
+			int distSq = here.distanceSquaredTo(bestPastrLocations[i]);
 			if (distSq < smallestAllyDistSq) smallestAllyDistSq = distSq;
 		}
 		return smallestEnemyDistSq < smallestAllyDistSq;

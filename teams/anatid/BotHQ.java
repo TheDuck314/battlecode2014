@@ -17,6 +17,7 @@ public class BotHQ extends Bot {
 
 	protected static void init(RobotController theRC) throws GameActionException {
 		Bot.init(theRC);
+		Debug.init(rc, "suppressor");
 
 		cowGrowth = rc.senseCowGrowth();
 		MessageBoard.setDefaultChannelValues();
@@ -50,6 +51,10 @@ public class BotHQ extends Bot {
 	static MapLocation[] bestPastrLocations = new MapLocation[MAX_PASTR_LOCATIONS];
 	static int numPastrLocations = 0;
 
+	public static final int MAX_SUPPRESSORS = 1;
+	static boolean singleSuppressorTriggered = false;
+	static int numSuppressorTargets = 0;
+
 	private static void turn() throws GameActionException {
 		updateStrategicInfo();
 
@@ -78,7 +83,8 @@ public class BotHQ extends Bot {
 		Strategy.active = pickStrategyByAnalyzingMap();
 		MessageBoard.STRATEGY.writeStrategy(Strategy.active);
 
-		if (Strategy.active == Strategy.ONE_PASTR || Strategy.active == Strategy.SCATTER) {
+		if (Strategy.active == Strategy.ONE_PASTR || Strategy.active == Strategy.ONE_PASTR_SUPPRESSOR || Strategy.active == Strategy.SCATTER
+				|| Strategy.active == Strategy.SCATTER_SUPPRESSOR) {
 			broadcastBestPastrLocations();
 		}
 	}
@@ -91,8 +97,11 @@ public class BotHQ extends Bot {
 	}
 
 	private static Strategy pickStrategyByAnalyzingMap() throws GameActionException {
-		return Strategy.PROXY_ATTACK;
+		// return Strategy.PROXY_ATTACK;
 		// return Strategy.ONE_PASTR;
+		// return Strategy.ONE_PASTR_SUPPRESSOR;
+		// return Strategy.SCATTER;
+		return Strategy.SCATTER_SUPPRESSOR;
 	}
 
 	private static void updateStrategicInfo() throws GameActionException {
@@ -119,6 +128,7 @@ public class BotHQ extends Bot {
 		allAllies = new RobotInfo[allAlliedRobots.length];
 		boolean[] towerBuildersAlive = new boolean[numPastrLocations];
 		boolean[] pastrBuildersAlive = new boolean[numPastrLocations];
+		boolean[] suppressorBuildersAlive = new boolean[numSuppressorTargets];
 		for (int i = allAlliedRobots.length; i-- > 0;) {
 			Robot ally = allAlliedRobots[i];
 			RobotInfo info = rc.senseRobotInfo(ally);
@@ -129,11 +139,17 @@ public class BotHQ extends Bot {
 				if (id == MessageBoard.TOWER_BUILDER_ROBOT_IDS.readCurrentAssignedID(j)) towerBuildersAlive[j] = true;
 				if (id == MessageBoard.PASTR_BUILDER_ROBOT_IDS.readCurrentAssignedID(j)) pastrBuildersAlive[j] = true;
 			}
+			for (int j = 0; j < numSuppressorTargets; j++) {
+				if (id == MessageBoard.SUPPRESSOR_BUILDER_ROBOT_IDS.readCurrentAssignedID(j)) suppressorBuildersAlive[j] = true;
+			}
 		}
 
 		for (int i = 0; i < numPastrLocations; i++) {
 			if (!towerBuildersAlive[i]) MessageBoard.TOWER_BUILDER_ROBOT_IDS.clearAssignment(i);
 			if (!pastrBuildersAlive[i]) MessageBoard.PASTR_BUILDER_ROBOT_IDS.clearAssignment(i);
+		}
+		for (int i = 0; i < numSuppressorTargets; i++) {
+			if (!suppressorBuildersAlive[i]) MessageBoard.SUPPRESSOR_BUILDER_ROBOT_IDS.clearAssignment(i);
 		}
 
 		ourMilk = rc.senseTeamMilkQuantity(us);
@@ -143,6 +159,7 @@ public class BotHQ extends Bot {
 	private static void directStrategy() throws GameActionException {
 		switch (Strategy.active) {
 			case ONE_PASTR:
+			case ONE_PASTR_SUPPRESSOR:
 				directStrategyOnePastr();
 				break;
 
@@ -152,6 +169,7 @@ public class BotHQ extends Bot {
 				break;
 
 			case SCATTER:
+			case SCATTER_SUPPRESSOR:
 				directStrategyScatter();
 				break;
 
@@ -193,6 +211,10 @@ public class BotHQ extends Bot {
 	}
 
 	private static void directStrategyScatter() throws GameActionException {
+		if (Strategy.active == Strategy.SCATTER_SUPPRESSOR) {
+			directSingleSuppressor();
+		}
+
 		rallyLoc = chooseEnemyPastrAttackTarget();
 		boolean beAggressive = false;
 		if (rallyLoc == null || rallyLoc.distanceSquaredTo(theirHQ) <= 5) {
@@ -215,6 +237,10 @@ public class BotHQ extends Bot {
 
 	private static void directStrategyOnePastr() throws GameActionException {
 		boolean desperation = false;
+
+		if (Strategy.active == Strategy.ONE_PASTR_SUPPRESSOR) {
+			directSingleSuppressor();
+		}
 
 		// Decided whether to trigger attack mode
 		if (!onePastrAttackModeTriggered) {
@@ -273,6 +299,23 @@ public class BotHQ extends Bot {
 		MessageBoard.RALLY_LOC.writeMapLocation(rallyLoc);
 	}
 
+	private static void directSingleSuppressor() throws GameActionException {
+		if (theirPastrs.length > 0 && !singleSuppressorTriggered) {
+			numSuppressorTargets = 1;
+			MessageBoard.NUM_SUPPRESSORS.writeInt(numSuppressorTargets);
+			MessageBoard.SUPPRESSOR_TARGET_LOCATIONS.writeToMapLocationList(0, theirPastrs[0]);
+			singleSuppressorTriggered = true;
+			Debug.indicate("suppressor", 0, "ordering suppressor for " + theirPastrs[0].toString());
+		}
+
+		if (theirPastrs.length == 0 && singleSuppressorTriggered) {
+			numSuppressorTargets = 0;
+			MessageBoard.NUM_SUPPRESSORS.writeInt(0);
+			singleSuppressorTriggered = false;
+		}
+
+	}
+
 	private static boolean theyHavePastrOutsideHQ() {
 		for (int i = numEnemyPastrs; i-- > 0;) {
 			if (!theirPastrs[i].isAdjacentTo(theirHQ)) {
@@ -324,11 +367,13 @@ public class BotHQ extends Bot {
 		double mapSize = Math.hypot(mapWidth, mapHeight);
 		MapLocation mapCenter = new MapLocation(mapWidth / 2, mapHeight / 2);
 
+		int spacing = mapWidth * mapHeight <= 2500 ? 3 : 5;
+
 		double[][] pastrScores = new double[mapWidth][mapHeight];
-		for (int y = 2; y < mapHeight - 2; y += 5) {
-			for (int x = 2; x < mapWidth - 2; x += 5) {
-				if (rc.senseTerrainTile(new MapLocation(x, y)) != TerrainTile.VOID) {
-					MapLocation loc = new MapLocation(x, y);
+		for (int y = 2; y < mapHeight - 2; y += spacing) {
+			for (int x = 2; x < mapWidth - 2; x += spacing) {
+				MapLocation loc = new MapLocation(x, y);
+				if (rc.senseTerrainTile(loc) != TerrainTile.VOID && !loc.equals(ourHQ) && !loc.equals(theirHQ)) {
 					double distOurHQ = Math.sqrt(loc.distanceSquaredTo(ourHQ));
 					double distTheirHQ = Math.sqrt(loc.distanceSquaredTo(theirHQ));
 					if (distOurHQ < distTheirHQ) {
@@ -342,7 +387,12 @@ public class BotHQ extends Bot {
 						}
 						if (numCows >= 5) {
 							double distCenter = Math.sqrt(loc.distanceSquaredTo(mapCenter));
-							pastrScores[x][y] = numCows * (1 + (1.0 * distCenter - 0.5 * distOurHQ + 0.5 * distTheirHQ) / mapSize);
+							double score = numCows * (1 + (1.0 * distCenter - 0.5 * distOurHQ + 0.5 * distTheirHQ) / mapSize);
+							if (distCenter < 10) score *= 0.5; // the center is a very bad place!!
+							for (int i = 8; i-- > 0;) {
+								if (rc.senseTerrainTile(loc.add(Direction.values()[i])) == TerrainTile.VOID) score *= 0.95;
+							}
+							pastrScores[x][y] = score;
 						} else {
 							pastrScores[x][y] = -999999; // must be at least some cows
 						}
@@ -352,7 +402,9 @@ public class BotHQ extends Bot {
 				} else {
 					pastrScores[x][y] = -999999; // don't make pastrs on void squares
 				}
+				// System.out.print(pastrScores[x][y] < 0 ? "XX " : String.format("%02d ", (int) pastrScores[x][y]));
 			}
+			// System.out.println();
 		}
 
 		computedPastrScores = pastrScores;
@@ -366,11 +418,13 @@ public class BotHQ extends Bot {
 		MapLocation theirPastr = null;
 		if (theyHavePastr) theirPastr = theirPastrs[0];
 
+		int spacing = mapWidth * mapHeight <= 2500 ? 3 : 5;
+
 		double[][] pastrScores = new double[mapWidth][mapHeight];
-		for (int y = 2; y < mapHeight - 2; y += 5) {
-			for (int x = 2; x < mapWidth - 2; x += 5) {
-				if (rc.senseTerrainTile(new MapLocation(x, y)) != TerrainTile.VOID) {
-					MapLocation loc = new MapLocation(x, y);
+		for (int y = 2; y < mapHeight - 2; y += spacing) {
+			for (int x = 2; x < mapWidth - 2; x += spacing) {
+				MapLocation loc = new MapLocation(x, y);
+				if (rc.senseTerrainTile(new MapLocation(x, y)) != TerrainTile.VOID && !loc.equals(ourHQ) && !loc.equals(theirHQ)) {
 					double distOurHQ = Math.sqrt(loc.distanceSquaredTo(ourHQ));
 					double distTheirHQ = Math.sqrt(loc.distanceSquaredTo(theirHQ));
 					if (distOurHQ <= distTheirHQ) {
@@ -408,8 +462,9 @@ public class BotHQ extends Bot {
 		MapLocation bestPastrLocation = null;
 		double bestPastrScore = -999;
 
-		for (int x = 2; x < mapWidth - 2; x += 5) {
-			for (int y = 2; y < mapHeight - 2; y += 5) {
+		int spacing = mapWidth * mapHeight <= 2500 ? 3 : 5;
+		for (int y = 2; y < mapHeight - 2; y += spacing) {
+			for (int x = 2; x < mapWidth - 2; x += spacing) {
 				if (computedPastrScores[x][y] > bestPastrScore) {
 					MapLocation loc = new MapLocation(x, y);
 					if (!Util.contains(ourPastrs, new MapLocation(x, y))) {
