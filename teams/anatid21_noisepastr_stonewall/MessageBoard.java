@@ -1,10 +1,10 @@
-package anatid;
+package anatid21_noisepastr_stonewall;
 
 import battlecode.common.*;
 
 public enum MessageBoard {
 	RALLY_LOC(GameConstants.BROADCAST_MAX_CHANNELS - 1),
-	RALLY_GOAL(GameConstants.BROADCAST_MAX_CHANNELS - 2),
+	BE_AGGRESSIVE(GameConstants.BROADCAST_MAX_CHANNELS - 2),
 	ROUND_KILL_COUNT(GameConstants.BROADCAST_MAX_CHANNELS - 3),
 	SPAWN_COUNT(GameConstants.BROADCAST_MAX_CHANNELS - 4),
 	STRATEGY(GameConstants.BROADCAST_MAX_CHANNELS - 5),
@@ -13,16 +13,15 @@ public enum MessageBoard {
 	SELF_DESTRUCT_LOCKOUT_ROUND(GameConstants.BROADCAST_MAX_CHANNELS - 8),
 	NUM_PASTR_LOCATIONS(GameConstants.BROADCAST_MAX_CHANNELS - 9),
 	NUM_SUPPRESSORS(GameConstants.BROADCAST_MAX_CHANNELS - 10),
-	BUILD_PASTRS_FAST(GameConstants.BROADCAST_MAX_CHANNELS - 11),
-	BEST_PASTR_LOCATIONS(GameConstants.BROADCAST_MAX_CHANNELS - 30),
-	TOWER_BUILDER_ROBOT_IDS(GameConstants.BROADCAST_MAX_CHANNELS - 40),
-	PASTR_BUILDER_ROBOT_IDS(GameConstants.BROADCAST_MAX_CHANNELS - 50),
-	SUPPRESSOR_TARGET_LOCATIONS(GameConstants.BROADCAST_MAX_CHANNELS - 60),
-	SUPPRESSOR_BUILDER_ROBOT_IDS(GameConstants.BROADCAST_MAX_CHANNELS - 70);
+	BEST_PASTR_LOCATIONS(GameConstants.BROADCAST_MAX_CHANNELS - 20),
+	TOWER_BUILDER_ROBOT_IDS(GameConstants.BROADCAST_MAX_CHANNELS - 30),
+	PASTR_BUILDER_ROBOT_IDS(GameConstants.BROADCAST_MAX_CHANNELS - 40),
+	SUPPRESSOR_TARGET_LOCATIONS(GameConstants.BROADCAST_MAX_CHANNELS - 50),
+	SUPPRESSOR_BUILDER_ROBOT_IDS(GameConstants.BROADCAST_MAX_CHANNELS - 60);
 
 	public static void setDefaultChannelValues() throws GameActionException {
 		RALLY_LOC.writeMapLocation(null);
-		RALLY_GOAL.writeRallyGoal(BotHQ.RallyGoal.GATHER);
+		BE_AGGRESSIVE.writeBoolean(false);
 		ROUND_KILL_COUNT.writeInt(0);
 		SPAWN_COUNT.writeInt(0);
 		STRATEGY.writeStrategy(Strategy.UNDECIDED);
@@ -31,7 +30,6 @@ public enum MessageBoard {
 		SELF_DESTRUCT_LOCKOUT_ROUND.writeInt(0);
 		NUM_PASTR_LOCATIONS.writeInt(0);
 		NUM_SUPPRESSORS.writeInt(0);
-		BUILD_PASTRS_FAST.writeBoolean(false);
 		for (int i = 0; i < BotHQ.MAX_PASTR_LOCATIONS; i++) {
 			BEST_PASTR_LOCATIONS.writeToMapLocationList(i, null);
 			TOWER_BUILDER_ROBOT_IDS.clearAssignment(i);
@@ -92,14 +90,6 @@ public enum MessageBoard {
 
 	public Strategy readStrategy() throws GameActionException {
 		return Strategy.values()[readInt()];
-	}
-	
-	public void writeRallyGoal(BotHQ.RallyGoal rg) throws GameActionException {
-		writeInt(rg.ordinal());
-	}
-	
-	public BotHQ.RallyGoal readRallyGoal() throws GameActionException {
-		return BotHQ.RallyGoal.values()[readInt()];
 	}
 
 	public void writeToMapLocationList(int index, MapLocation loc) throws GameActionException {

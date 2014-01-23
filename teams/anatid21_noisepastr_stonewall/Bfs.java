@@ -1,4 +1,4 @@
-package anatid;
+package anatid21_noisepastr_stonewall;
 
 import battlecode.common.*;
 

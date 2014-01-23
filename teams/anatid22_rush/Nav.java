@@ -1,4 +1,4 @@
-package anatid;
+package anatid22_rush;
 
 import battlecode.common.*;
 
@@ -8,8 +8,6 @@ public class Nav {
 	private static boolean sneak = false;
 	private static boolean engage = false;
 	private static int[] numEnemiesAttackingMoveDirs;
-	private static boolean fightDecisionIsCached = false;
-	private static boolean fightIsWinningDecision;
 
 	private enum BugState {
 		DIRECT,
@@ -220,7 +218,6 @@ public class Nav {
 		sneak = (theSneak == Sneak.YES);
 		engage = (theEngage == Engage.YES);
 		numEnemiesAttackingMoveDirs = theNumEnemiesAttackingMoveDirs;
-		fightDecisionIsCached = false;
 
 		if (!theDest.equals(dest)) {
 			dest = theDest;
@@ -253,22 +250,7 @@ public class Nav {
 	}
 
 	private static boolean moveIsAllowedByEngagementRules(Direction dir) throws GameActionException {
-		if (numEnemiesAttackingMoveDirs[dir.ordinal()] == 0) return true;
-		if (!engage) return false;
-
-		if (fightDecisionIsCached) return fightIsWinningDecision;
-
-		Robot[] allEngagedEnemies = rc.senseNearbyGameObjects(Robot.class, rc.getLocation().add(dir), RobotType.SOLDIER.attackRadiusMaxSquared, rc.getTeam()
-				.opponent());
-		RobotInfo anEngagedEnemy = Util.findANonConstructingSoldier(allEngagedEnemies, rc);
-		if (anEngagedEnemy == null) return true;
-
-		int numNearbyAllies = 1 + Util.countNonConstructingSoldiers(rc.senseNearbyGameObjects(Robot.class, anEngagedEnemy.location, 20, rc.getTeam()), rc);
-		int numNearbyEnemies = Util.countNonConstructingSoldiers(rc.senseNearbyGameObjects(Robot.class, anEngagedEnemy.location, 49, rc.getTeam().opponent()), rc);
-
-		boolean ret = numNearbyAllies > numNearbyEnemies;
-		fightIsWinningDecision = ret;
-		fightDecisionIsCached = true;
-		return ret;
+		if (engage) return true;
+		else return numEnemiesAttackingMoveDirs[dir.ordinal()] == 0;
 	}
 }

@@ -7,6 +7,11 @@ jianty_ = Armada
 slumerville = DoYouEvenMilk
 tfk1 = quotes
 
+team003 - PaddleGoats
+   1/21 - Rushing quite effectively. Watch game 5655 for some quiet, effective aggressive micro.
+          Try to understand whether I'm making micro mistakes or whether it's just that rush will
+          win in these situations.
+
 team160 - 0xg
    1/21 - camps your spawn!! This can actually be pretty effective! Except they don't yet go after your
           pastrs or do anything else...

@@ -1,4 +1,4 @@
-package anatid;
+package anatid23_twopastr;
 
 import battlecode.common.*;
 
@@ -103,6 +103,7 @@ public class BotHQ extends Bot {
 		boolean safe = true;
 		computePastrScores(repel, safe);
 		computeOneGoodPastrLocation();
+		computeSecondGoodPastrLocation();
 
 		Strategy.active = pickStrategyByAnalyzingMap();
 		MessageBoard.STRATEGY.writeStrategy(Strategy.active);

@@ -1,4 +1,4 @@
-package anatid;
+package anatid23_twopastr;
 
 public enum Strategy {
 	ONE_PASTR, // Build a noise tower then pastr somewhere nice

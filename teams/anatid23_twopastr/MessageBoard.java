@@ -1,4 +1,4 @@
-package anatid;
+package anatid23_twopastr;
 
 import battlecode.common.*;
 

@@ -1,4 +1,4 @@
-package anatid;
+package anatid22_rush;
 
 import battlecode.common.*;
 

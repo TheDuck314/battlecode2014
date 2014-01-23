@@ -1,4 +1,4 @@
-package anatid;
+package anatid21_stonewall_attack;
 
 import battlecode.common.*;
 

@@ -1,4 +1,4 @@
-package anatid;
+package anatid21_stonewall_attack;
 
 import battlecode.common.*;
 
@@ -76,14 +76,6 @@ public class Util {
 		return null;
 	}
 
-	public static RobotInfo findANonConstructingSoldier(Robot[] robots, RobotController rc) throws GameActionException {
-		for (int i = robots.length; i-- > 0;) {
-			RobotInfo info = rc.senseRobotInfo(robots[i]);
-			if (info.type == RobotType.SOLDIER && !info.isConstructing) return info;
-		}
-		return null;
-	}
-
 	public static RobotInfo[] senseAllInfos(Robot[] bots, RobotController rc) throws GameActionException {
 		RobotInfo[] ret = new RobotInfo[bots.length];
 		for (int i = bots.length; i-- > 0;) {
@@ -154,7 +146,7 @@ public class Util {
 		}
 		return false;
 	}
-
+	
 	// a "helpless" robot is a pastr, noise tower, or constructing soldier
 	public static boolean isHelpless(RobotInfo info) {
 		return info.type == RobotType.PASTR || info.type == RobotType.NOISETOWER || info.isConstructing;
