@@ -1,4 +1,4 @@
-package anatid;
+package anatid23_onepastr;
 
 import java.util.ArrayList;
 
@@ -19,7 +19,7 @@ public class BotSoldier extends Bot {
 
     protected static void init(RobotController theRC) throws GameActionException {
         Bot.init(theRC);
-        Debug.init(theRC, "nav");
+        Debug.init(theRC, "move");
         Nav.init(theRC);
 
         spawnOrder = MessageBoard.SPAWN_COUNT.readInt();
@@ -128,7 +128,6 @@ public class BotSoldier extends Bot {
             MapLocation target = MessageBoard.SUPPRESSOR_TARGET_LOCATIONS.readFromMapLocationList(suppressorBuildAssignmentIndex);
             if (tryBuildSuppressor(target)) return;
             Nav.goTo(target, Nav.Sneak.NO, Nav.Engage.NO, countNumEnemiesAttackingMoveDirs());
-            return;
         }
 
         if (rallyLoc != null) {

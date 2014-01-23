@@ -1,4 +1,4 @@
-package anatid;
+package anatid23_scatter_twopastr;
 
 import java.util.ArrayList;
 

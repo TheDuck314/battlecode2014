@@ -1,4 +1,4 @@
-package anatid;
+package anatid23_scatter;
 
 import battlecode.common.*;
 
@@ -103,7 +103,6 @@ public class BotHQ extends Bot {
 		boolean safe = true;
 		computePastrScores(repel, safe);
 		computeOneGoodPastrLocation();
-		computeSecondGoodPastrLocation();
 
 		Strategy.active = pickStrategyByAnalyzingMap();
 		MessageBoard.STRATEGY.writeStrategy(Strategy.active);
@@ -184,8 +183,8 @@ public class BotHQ extends Bot {
 	}
 
 	private static void directStrategy() throws GameActionException {
-		if (numAlliedPastrs > 0) MessageBoard.BUILD_PASTRS_FAST.writeBoolean(true);
-
+		if(numAlliedPastrs > 0) MessageBoard.BUILD_PASTRS_FAST.writeBoolean(true);
+		
 		switch (Strategy.active) {
 			case ONE_PASTR:
 			case ONE_PASTR_SUPPRESSOR:

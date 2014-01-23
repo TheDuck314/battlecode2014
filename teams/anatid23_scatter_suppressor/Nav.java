@@ -1,4 +1,4 @@
-package anatid;
+package anatid23_scatter_suppressor;
 
 import battlecode.common.*;
 
@@ -27,7 +27,6 @@ public class Nav {
 	private static Direction bugLastMoveDir;
 	private static Direction bugLookStartDir;
 	private static int bugRotationCount;
-	private static int bugMovesSinceSeenObstacle = 0;
 
 	private static boolean tryMoveDirect() throws GameActionException {
 		MapLocation here = rc.getLocation();
@@ -60,16 +59,13 @@ public class Nav {
 		bugLastMoveDir = rc.getLocation().directionTo(dest);
 		bugLookStartDir = rc.getLocation().directionTo(dest);
 		bugRotationCount = 0;
-		bugMovesSinceSeenObstacle = 0;
 	}
 
 	private static Direction findBugMoveDir() throws GameActionException {
-		bugMovesSinceSeenObstacle++;
 		Direction dir = bugLookStartDir;
 		for (int i = 8; i-- > 0;) {
 			if (canMoveSafely(dir) && moveIsAllowedByEngagementRules(dir)) return dir;
 			dir = (bugWallSide == WallSide.LEFT ? dir.rotateRight() : dir.rotateLeft());
-			bugMovesSinceSeenObstacle = 0;
 		}
 		return null;
 	}
@@ -94,8 +90,6 @@ public class Nav {
 		move(dir);
 		bugRotationCount += calculateBugRotation(dir);
 		bugLastMoveDir = dir;
-		//if (bugWallSide == WallSide.LEFT) bugLookStartDir = dir.isDiagonal() ? dir.rotateLeft().rotateLeft() : dir.rotateLeft();
-		//else bugLookStartDir = dir.isDiagonal() ? dir.rotateRight().rotateRight() : dir.rotateRight();
 		if (bugWallSide == WallSide.LEFT) bugLookStartDir = dir.rotateLeft().rotateLeft();
 		else bugLookStartDir = dir.rotateRight().rotateRight();
 	}
@@ -130,7 +124,6 @@ public class Nav {
 	}
 
 	private static boolean canEndBug() {
-		if (bugMovesSinceSeenObstacle >= 4) return true;
 		return (bugRotationCount <= 0 || bugRotationCount >= 8) && rc.getLocation().distanceSquaredTo(dest) <= bugStartDistSq;
 	}
 
@@ -138,7 +131,7 @@ public class Nav {
 		// Check if we can stop bugging at the *beginning* of the turn
 		if (bugState == BugState.BUG) {
 			if (canEndBug()) {
-				// Debug.indicateAppend("nav", 1, "ending bug; ");
+				//Debug.indicateAppend("nav", 1, "ending bug; ");
 				bugState = BugState.DIRECT;
 			}
 		}
@@ -146,17 +139,17 @@ public class Nav {
 		// If DIRECT mode, try to go directly to target
 		if (bugState == BugState.DIRECT) {
 			if (!tryMoveDirect()) {
-				// Debug.indicateAppend("nav", 1, "starting to bug; ");
+				//Debug.indicateAppend("nav", 1, "starting to bug; ");
 				bugState = BugState.BUG;
 				startBug();
 			} else {
-				// Debug.indicateAppend("nav", 1, "successful direct move; ");
+				//Debug.indicateAppend("nav", 1, "successful direct move; ");
 			}
 		}
 
 		// If that failed, or if bugging, bug
 		if (bugState == BugState.BUG) {
-			// Debug.indicateAppend("nav", 1, "bugging; ");
+			//Debug.indicateAppend("nav", 1, "bugging; ");
 			bugTurn();
 		}
 	}
@@ -208,19 +201,19 @@ public class Nav {
 	}
 
 	public static void goTo(MapLocation theDest, Sneak theSneak, Engage theEngage, int[] theNumEnemiesAttackingMoveDirs) throws GameActionException {
-		// Debug.indicate("nav", 2, "goTo " + theDest.toString());
+		//Debug.indicate("nav", 2, "goTo " + theDest.toString());
 
 		sneak = (theSneak == Sneak.YES);
 		engage = (theEngage == Engage.YES);
 		numEnemiesAttackingMoveDirs = theNumEnemiesAttackingMoveDirs;
 		fightDecisionIsCached = false;
 
-		// Debug.indicate("nav", 1, "");
+		//Debug.indicate("nav", 1, "");
 
 		if (!theDest.equals(dest)) {
 			dest = theDest;
 			bugState = BugState.DIRECT;
-			// Debug.indicateAppend("nav", 1, "new dest: resetting bug to direct; ");
+			//Debug.indicateAppend("nav", 1, "new dest: resetting bug to direct; ");
 		}
 
 		MapLocation here = rc.getLocation();
@@ -231,11 +224,11 @@ public class Nav {
 
 		if (tryMoveBfs(here)) {
 			bugState = BugState.DIRECT; // reset bug
-			// Debug.indicate("nav", 0, "using bfs");
+			//Debug.indicate("nav", 0, "using bfs");
 			return;
 		}
 
-		// Debug.indicate("nav", 0, "using bug");
+		//Debug.indicate("nav", 0, "using bug");
 		bugTo(dest);
 	}
 

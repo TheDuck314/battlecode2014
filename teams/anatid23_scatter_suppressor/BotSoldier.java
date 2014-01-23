@@ -1,4 +1,4 @@
-package anatid;
+package anatid23_scatter_suppressor;
 
 import java.util.ArrayList;
 
