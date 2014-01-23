@@ -263,8 +263,8 @@ public class Nav {
 		RobotInfo anEngagedEnemy = Util.findANonConstructingSoldier(allEngagedEnemies, rc);
 		if (anEngagedEnemy == null) return true;
 
-		int numNearbyAllies = 1 + rc.senseNearbyGameObjects(Robot.class, anEngagedEnemy.location, 20, rc.getTeam()).length;
-		int numNearbyEnemies = rc.senseNearbyGameObjects(Robot.class, anEngagedEnemy.location, 49, rc.getTeam().opponent()).length;
+		int numNearbyAllies = 1 + Util.countNonConstructingSoldiers(rc.senseNearbyGameObjects(Robot.class, anEngagedEnemy.location, 20, rc.getTeam()), rc);
+		int numNearbyEnemies = Util.countNonConstructingSoldiers(rc.senseNearbyGameObjects(Robot.class, anEngagedEnemy.location, 49, rc.getTeam().opponent()), rc);
 
 		boolean ret = numNearbyAllies > numNearbyEnemies;
 		fightIsWinningDecision = ret;

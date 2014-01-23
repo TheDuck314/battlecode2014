@@ -53,7 +53,7 @@ public class BotHQ extends Bot {
 	static MapLocation rallyLoc = null;
 	static RallyGoal rallyGoal = RallyGoal.GATHER;
 
-	static boolean onePastrAttackModeTriggered = false;
+	static boolean attackModeTriggered = false;
 
 	static boolean proxyPastrBuildTriggered = false;
 
@@ -102,7 +102,7 @@ public class BotHQ extends Bot {
 		MapLocation repel = null;
 		boolean safe = true;
 		computePastrScores(repel, safe);
-		computeBestPastrLocations();
+		computeOneGoodPastrLocation();
 
 		Strategy.active = pickStrategyByAnalyzingMap();
 		MessageBoard.STRATEGY.writeStrategy(Strategy.active);
@@ -121,10 +121,11 @@ public class BotHQ extends Bot {
 	}
 
 	private static Strategy pickStrategyByAnalyzingMap() throws GameActionException {
-		return Strategy.PROXY_ATTACK;
+		// return Strategy.PROXY_ATTACK;
+		// return Strategy.PROXY;
 		// return Strategy.ONE_PASTR;
 		// return Strategy.ONE_PASTR_SUPPRESSOR;
-		// return Strategy.SCATTER;
+		return Strategy.SCATTER;
 		// return Strategy.SCATTER_SUPPRESSOR;
 		// return Strategy.RUSH;
 	}
@@ -182,20 +183,19 @@ public class BotHQ extends Bot {
 	}
 
 	private static void directStrategy() throws GameActionException {
+		if(numAlliedPastrs > 0) MessageBoard.BUILD_PASTRS_FAST.writeBoolean(true);
+		
 		switch (Strategy.active) {
 			case ONE_PASTR:
 			case ONE_PASTR_SUPPRESSOR:
+			case SCATTER:
+			case SCATTER_SUPPRESSOR:
 				directStrategyOnePastr();
 				break;
 
 			case PROXY:
 			case PROXY_ATTACK:
 				directStrategyProxy();
-				break;
-
-			case SCATTER:
-			case SCATTER_SUPPRESSOR:
-				directStrategyScatter();
 				break;
 
 			case RUSH:
@@ -234,45 +234,18 @@ public class BotHQ extends Bot {
 			MapLocation repel = numEnemyPastrs > 0 ? theirPastrs[0] : null;
 			boolean safe = false;
 			computePastrScores(repel, safe);
-			computeBestPastrLocations();
+			computeOneGoodPastrLocation();
 			broadcastBestPastrLocations();
 		}
 	}
 
-	private static void directStrategyScatter() throws GameActionException {
-		if (Strategy.active == Strategy.SCATTER_SUPPRESSOR) {
-			directSingleSuppressor();
-		}
-
-		rallyLoc = chooseEnemyPastrAttackTarget();
-		rallyGoal = RallyGoal.HARRASS;
-		if (rallyLoc == null || rallyLoc.distanceSquaredTo(theirHQ) <= 5) {
-			int bestDistSq = 999999;
-			MapLocation soldierCenter = findSoldierCenterOfMass();
-			if (soldierCenter == null) soldierCenter = ourHQ;
-			for (int i = 0; i < numPastrLocations; i++) {
-				MapLocation pastrLoc = bestPastrLocations[i];
-				int distSq = soldierCenter.distanceSquaredTo(pastrLoc);
-				if (distSq < bestDistSq) {
-					bestDistSq = distSq;
-					rallyLoc = pastrLoc;
-					rallyGoal = RallyGoal.DEFEND;
-				}
-			}
-		}
-		MessageBoard.RALLY_LOC.writeMapLocation(rallyLoc);
-		MessageBoard.RALLY_GOAL.writeRallyGoal(rallyGoal);
-	}
-
 	private static void directStrategyOnePastr() throws GameActionException {
-		boolean desperation = false;
-
-		if (Strategy.active == Strategy.ONE_PASTR_SUPPRESSOR) {
+		if (Strategy.active == Strategy.ONE_PASTR_SUPPRESSOR || Strategy.active == Strategy.SCATTER_SUPPRESSOR) {
 			directSingleSuppressor();
 		}
 
 		// Decided whether to trigger attack mode
-		if (!onePastrAttackModeTriggered) {
+		if (!attackModeTriggered) {
 			// if the enemy has overextended himself building pastrs, attack!
 			// I think even building two pastrs is an overextension that we can punish.
 			if (numEnemyPastrs >= 2) {
@@ -281,7 +254,7 @@ public class BotHQ extends Bot {
 				// around their HQ; it doesn't help them and we can't kill them.
 				if (theyHavePastrOutsideHQ()) {
 					// If all these conditions are met, then punish them!
-					onePastrAttackModeTriggered = true;
+					attackModeTriggered = true;
 				}
 			}
 
@@ -290,13 +263,14 @@ public class BotHQ extends Bot {
 				// If they just have a single pastr next to their HQ, though, attacking them won't do much
 				// good. Better to just hope we out-milk them
 				if (theyHavePastrOutsideHQ()) {
-					onePastrAttackModeTriggered = true;
-					desperation = true;
+					attackModeTriggered = true;
 				}
 			}
 		}
 
-		if (onePastrAttackModeTriggered) {
+		rallyLoc = null;
+		if (attackModeTriggered) {
+			// attack an enemy pastr
 			rallyLoc = chooseEnemyPastrAttackTarget();
 			rallyGoal = RallyGoal.DESTROY;
 
@@ -304,24 +278,30 @@ public class BotHQ extends Bot {
 			if (numAlliedPastrs == 0 && rallyLoc != null && rallyLoc.isAdjacentTo(theirHQ)) {
 				rallyLoc = null;
 			}
+		}
 
-			// if there's no pastr to attack, decide whether to camp their spawn or to defend/rebuid our pastr:
-			if (rallyLoc == null) {
-				// first, if our pastr has been destroyed we need to rebuild it instead of attacking.
-				// but if it's up, consider camping their spawn. Camping their spawn is only a good idea
-				// if we are ahead on milk. Otherwise we should defend our pastr
-				if (numAlliedPastrs > 0 && !desperation) {
-					rallyLoc = theirHQ;
-					rallyGoal = RallyGoal.HARRASS;
-				} else {
-					rallyLoc = bestPastrLocations[0];
-					rallyGoal = RallyGoal.DEFEND;
+		if (rallyLoc == null) { // if attack mode isn't triggered, or if there is no good target to attack
+			rallyLoc = null;
+			if (Strategy.active == Strategy.SCATTER || Strategy.active == Strategy.SCATTER_SUPPRESSOR) {
+				// scatter strategies harrass the enemy pastrs, if any
+				rallyLoc = chooseEnemyPastrAttackTarget();
+				rallyGoal = RallyGoal.HARRASS;
+			}
+			// If we aren't harrassing, rally to the nearest allied pastr location
+			if (rallyLoc == null || rallyLoc.distanceSquaredTo(theirHQ) <= 5) {
+				int bestDistSq = 999999;
+				MapLocation soldierCenter = findSoldierCenterOfMass();
+				if (soldierCenter == null) soldierCenter = ourHQ;
+				for (int i = 0; i < numPastrLocations; i++) {
+					MapLocation pastrLoc = bestPastrLocations[i];
+					int distSq = soldierCenter.distanceSquaredTo(pastrLoc);
+					if (distSq < bestDistSq) {
+						bestDistSq = distSq;
+						rallyLoc = pastrLoc;
+						rallyGoal = RallyGoal.DEFEND;
+					}
 				}
 			}
-		} else {
-			// If not attacking, rally to our pastr
-			rallyLoc = bestPastrLocations[0];
-			rallyGoal = RallyGoal.DEFEND;
 		}
 		MessageBoard.RALLY_LOC.writeMapLocation(rallyLoc);
 		MessageBoard.RALLY_GOAL.writeRallyGoal(rallyGoal);
@@ -368,9 +348,14 @@ public class BotHQ extends Bot {
 			}
 		}
 
+		// If we successfully destroy their pastr, eliminate the delay before building
+		if (rushBuildStartRound > Clock.getRoundNum() && numEnemyPastrs == 0) {
+			rushBuildStartRound = Clock.getRoundNum();
+		}
+
 		if (rushBuildStartRound > 0 && Clock.getRoundNum() >= rushBuildStartRound && !rushBuildOrderIssued) {
 			computePastrScores(rushPastrRepel, rushPastrSafe);
-			computeBestPastrLocations();
+			computeOneGoodPastrLocation();
 			broadcastBestPastrLocations();
 			rushBuildOrderIssued = true;
 		}
@@ -469,9 +454,9 @@ public class BotHQ extends Bot {
 								score *= (1 + (1.0 * distCenter - 0.5 * distOurHQ + 0.5 * distTheirHQ) / mapSize);
 								if (distCenter < 10) score *= 0.5; // the center is a very bad place!!
 							}
-							if (repel != null) {
+							if (repel != null && loc.distanceSquaredTo(repel) < 200) {
 								// Optionally we can try to keep away from a given location
-								score *= (1 + Math.sqrt(loc.distanceSquaredTo(repel) / mapSize));
+								score *= 0.5;
 							}
 							for (int i = 8; i-- > 0;) {
 								// Bad idea to have pastrs next to walls. Enemies can shoot over them in a way that's hard to defend against
@@ -495,7 +480,7 @@ public class BotHQ extends Bot {
 		computedPastrScores = pastrScores;
 	}
 
-	private static void computeBestPastrLocations() {
+	private static void computeOneGoodPastrLocation() {
 		MapLocation bestPastrLocation = null;
 		double bestPastrScore = -999;
 
@@ -514,6 +499,32 @@ public class BotHQ extends Bot {
 
 		bestPastrLocations[0] = bestPastrLocation;
 		numPastrLocations = 1;
+	}
+
+	private static void computeSecondGoodPastrLocation() {
+		MapLocation bestSecondPastrLocation = null;
+		double bestScore = -999;
+		MapLocation firstPastrLoc = bestPastrLocations[0];
+
+		int spacing = mapWidth * mapHeight <= 2500 ? 3 : 5;
+		for (int y = 2; y < mapHeight - 2; y += spacing) {
+			for (int x = 2; x < mapWidth - 2; x += spacing) {
+				if (computedPastrScores[x][y] > bestScore) {
+					MapLocation loc = new MapLocation(x, y);
+					if (loc.distanceSquaredTo(firstPastrLoc) > 1600) {
+						if (!Util.contains(ourPastrs, new MapLocation(x, y))) {
+							bestScore = computedPastrScores[x][y];
+							bestSecondPastrLocation = loc;
+						}
+					}
+				}
+			}
+		}
+
+		if (bestSecondPastrLocation != null) {
+			bestPastrLocations[1] = bestSecondPastrLocation;
+			numPastrLocations = 2;
+		}
 	}
 
 	private static boolean attackEnemies() throws GameActionException {

@@ -212,7 +212,7 @@ public class BotSoldier extends Bot {
 	}
 
 	private static boolean tryBuildSomething() throws GameActionException {
-		if (1 + numOtherAlliedSoldiersInRange(here, RobotType.SOLDIER.sensorRadiusSquared) <= 2 * visibleEnemies.length) return false;
+		if (1 + numOtherAlliedSoldiersInRange(here, RobotType.SOLDIER.sensorRadiusSquared) <= 2 * visibleEnemies.length) return true;
 
 		for (int i = 0; i < numPastrLocations; i++) {
 			MapLocation pastrLoc = bestPastrLocations[i];
@@ -221,7 +221,7 @@ public class BotSoldier extends Bot {
 				if (!MessageBoard.PASTR_BUILDER_ROBOT_IDS.checkIfIOwnAssignment(i)) {
 					MessageBoard.PASTR_BUILDER_ROBOT_IDS.claimAssignment(i);
 				}
-				if (Util.containsNoiseTower(rc.senseNearbyGameObjects(Robot.class, pastrLoc, 2, us), rc)) {
+				if (MessageBoard.BUILD_PASTRS_FAST.readBoolean() || Util.containsNoiseTower(rc.senseNearbyGameObjects(Robot.class, pastrLoc, 2, us), rc)) {
 					// Debug.indicate("build", 0, "building pastr!");
 					rc.construct(RobotType.PASTR);
 				}
@@ -257,14 +257,14 @@ public class BotSoldier extends Bot {
 
 	private static void constructNoiseTower(MapLocation pastrLoc) throws GameActionException {
 		rc.construct(RobotType.NOISETOWER);
-		HerdPattern.computeAndPublish(here, pastrLoc, rc);
+		// HerdPattern.computeAndPublish(here, pastrLoc, rc);
 	}
 
 	private static void updateEnemyData() throws GameActionException {
 		Robot[] visibleEnemyRobots = rc.senseNearbyGameObjects(Robot.class, RobotType.SOLDIER.sensorRadiusSquared, them);
 
 		visibleEnemies = new RobotInfo[visibleEnemyRobots.length];
-	    numVisibleNonConstructingEnemySoldiers = 0;
+		numVisibleNonConstructingEnemySoldiers = 0;
 		for (int i = visibleEnemyRobots.length; i-- > 0;) {
 			visibleEnemies[i] = rc.senseRobotInfo(visibleEnemyRobots[i]);
 			if (visibleEnemies[i].type == RobotType.SOLDIER && !visibleEnemies[i].isConstructing) numVisibleNonConstructingEnemySoldiers++;
@@ -291,7 +291,7 @@ public class BotSoldier extends Bot {
 		double maxDamage = GameConstants.SELF_DESTRUCT_BASE_DAMAGE + GameConstants.SELF_DESTRUCT_DAMAGE_FACTOR * rc.getHealth();
 		double damageDealt = 0;
 		for (RobotInfo info : attackableEnemies) {
-			if (info.location.isAdjacentTo(here)) {
+			if (info.location.isAdjacentTo(here) && info.type == RobotType.SOLDIER && !info.isConstructing) {
 				damageDealt += Math.min(info.health, maxDamage);
 			}
 		}
@@ -318,7 +318,7 @@ public class BotSoldier extends Bot {
 				return MicroStance.SAFE; // Don't waste units
 
 			case HARRASS:
-				if (here.distanceSquaredTo(rallyLoc) > 81) return MicroStance.AGGRESSIVE; // punch through to the target
+				if (here.distanceSquaredTo(rallyLoc) > 100) return MicroStance.AGGRESSIVE; // punch through to the target
 				else return MicroStance.SAFE; // Don't lose units
 
 			default:
@@ -341,7 +341,13 @@ public class BotSoldier extends Bot {
 				return false;
 
 			case DESTROY:
+				return false;
+
 			case HARRASS:
+				if (here.distanceSquaredTo(rallyLoc) <= 81) {
+					tryMoveTowardLocationWithMaxEnemyExposure(rallyLoc, 0, sneak);
+					return true;
+				}
 				return false;
 
 			default: // shouldn't happen
@@ -448,7 +454,7 @@ public class BotSoldier extends Bot {
 			return false;
 		}
 	}
-	
+
 	private static boolean guessIfFightIsWinning() {
 		switch (numVisibleNonConstructingEnemySoldiers) {
 			case 0:
@@ -507,6 +513,7 @@ public class BotSoldier extends Bot {
 		double maxDamage = GameConstants.SELF_DESTRUCT_BASE_DAMAGE + GameConstants.SELF_DESTRUCT_DAMAGE_FACTOR * rc.getHealth();
 		double[] moveScores = new double[8];
 		for (RobotInfo info : attackableEnemies) {
+			if (info.type != RobotType.SOLDIER || info.isConstructing) continue;
 			double score = Math.min(maxDamage, info.health);
 			int[] moves = selfDestructNotes[3 + info.location.x - here.x][3 + info.location.y - here.y];
 			for (int dir : moves) {
@@ -607,7 +614,8 @@ public class BotSoldier extends Bot {
 		return false;
 	}
 
-	private static boolean tryMoveTowardLocationWithMaxEnemyExposureWithinRadius(MapLocation dest, int maxEnemyExposure, MapLocation center, int maxRadiusSq, Nav.Sneak sneak) throws GameActionException {
+	private static boolean tryMoveTowardLocationWithMaxEnemyExposureWithinRadius(MapLocation dest, int maxEnemyExposure, MapLocation center, int maxRadiusSq,
+			Nav.Sneak sneak) throws GameActionException {
 		int[] numEnemiesAttackingDirs = countNumEnemiesAttackingMoveDirs();
 
 		Direction toEnemy = here.directionTo(dest);
