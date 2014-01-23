@@ -49,6 +49,30 @@ public class BotNoiseTower extends Bot {
 			if (suppressorIndex != -1) {
 				MessageBoard.SUPPRESSOR_BUILDER_ROBOT_IDS.claimAssignment(suppressorIndex);
 			}
+		} else {
+			// Figure out the best direction to start herding in
+			double[] freeCows = new double[8];
+			double[][] cowGrowth = rc.senseCowGrowth();
+			Direction[] dirs = Direction.values();
+			for (int i = 0; i < 8; i++) {
+				Direction dir = dirs[i];
+				MapLocation probe = here.add(dir);
+				while (Util.passable(rc.senseTerrainTile(probe)) && here.distanceSquaredTo(probe) <= RobotType.NOISETOWER.attackRadiusMaxSquared) {
+					freeCows[i] += cowGrowth[probe.x][probe.y];
+					probe = probe.add(dir);
+				}
+			}
+
+			double bestScore = -1;
+			int bestDir = -1;
+			for (int i = 0; i < 8; i++) {
+				double score = freeCows[i] + freeCows[(i + 1) % 8] + freeCows[(i + 2) % 8];
+				if (score > bestScore) {
+					bestScore = score;
+					bestDir = i;
+				}
+			}
+			attackDir = dirs[bestDir];
 		}
 	}
 

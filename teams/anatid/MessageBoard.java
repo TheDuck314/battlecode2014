@@ -4,7 +4,7 @@ import battlecode.common.*;
 
 public enum MessageBoard {
 	RALLY_LOC(GameConstants.BROADCAST_MAX_CHANNELS - 1),
-	BE_AGGRESSIVE(GameConstants.BROADCAST_MAX_CHANNELS - 2),
+	RALLY_GOAL(GameConstants.BROADCAST_MAX_CHANNELS - 2),
 	ROUND_KILL_COUNT(GameConstants.BROADCAST_MAX_CHANNELS - 3),
 	SPAWN_COUNT(GameConstants.BROADCAST_MAX_CHANNELS - 4),
 	STRATEGY(GameConstants.BROADCAST_MAX_CHANNELS - 5),
@@ -13,15 +13,15 @@ public enum MessageBoard {
 	SELF_DESTRUCT_LOCKOUT_ROUND(GameConstants.BROADCAST_MAX_CHANNELS - 8),
 	NUM_PASTR_LOCATIONS(GameConstants.BROADCAST_MAX_CHANNELS - 9),
 	NUM_SUPPRESSORS(GameConstants.BROADCAST_MAX_CHANNELS - 10),
-	BEST_PASTR_LOCATIONS(GameConstants.BROADCAST_MAX_CHANNELS - 20),
-	TOWER_BUILDER_ROBOT_IDS(GameConstants.BROADCAST_MAX_CHANNELS - 30),
-	PASTR_BUILDER_ROBOT_IDS(GameConstants.BROADCAST_MAX_CHANNELS - 40),
-	SUPPRESSOR_TARGET_LOCATIONS(GameConstants.BROADCAST_MAX_CHANNELS - 50),
-	SUPPRESSOR_BUILDER_ROBOT_IDS(GameConstants.BROADCAST_MAX_CHANNELS - 60);
+	BEST_PASTR_LOCATIONS(GameConstants.BROADCAST_MAX_CHANNELS - 30),
+	TOWER_BUILDER_ROBOT_IDS(GameConstants.BROADCAST_MAX_CHANNELS - 40),
+	PASTR_BUILDER_ROBOT_IDS(GameConstants.BROADCAST_MAX_CHANNELS - 50),
+	SUPPRESSOR_TARGET_LOCATIONS(GameConstants.BROADCAST_MAX_CHANNELS - 60),
+	SUPPRESSOR_BUILDER_ROBOT_IDS(GameConstants.BROADCAST_MAX_CHANNELS - 70);
 
 	public static void setDefaultChannelValues() throws GameActionException {
 		RALLY_LOC.writeMapLocation(null);
-		BE_AGGRESSIVE.writeBoolean(false);
+		RALLY_GOAL.writeRallyGoal(BotHQ.RallyGoal.GATHER);
 		ROUND_KILL_COUNT.writeInt(0);
 		SPAWN_COUNT.writeInt(0);
 		STRATEGY.writeStrategy(Strategy.UNDECIDED);
@@ -90,6 +90,14 @@ public enum MessageBoard {
 
 	public Strategy readStrategy() throws GameActionException {
 		return Strategy.values()[readInt()];
+	}
+	
+	public void writeRallyGoal(BotHQ.RallyGoal rg) throws GameActionException {
+		writeInt(rg.ordinal());
+	}
+	
+	public BotHQ.RallyGoal readRallyGoal() throws GameActionException {
+		return BotHQ.RallyGoal.values()[readInt()];
 	}
 
 	public void writeToMapLocationList(int index, MapLocation loc) throws GameActionException {
