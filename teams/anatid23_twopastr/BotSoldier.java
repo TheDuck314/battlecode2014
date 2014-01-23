@@ -212,7 +212,7 @@ public class BotSoldier extends Bot {
 	}
 
 	private static boolean tryBuildSomething() throws GameActionException {
-		if (1 + numOtherAlliedSoldiersInRange(here, RobotType.SOLDIER.sensorRadiusSquared) <= 2 * visibleEnemies.length) return true;
+		if (1 + numOtherAlliedSoldiersInRange(here, RobotType.SOLDIER.sensorRadiusSquared) <= 2 * visibleEnemies.length) return false;
 
 		for (int i = 0; i < numPastrLocations; i++) {
 			MapLocation pastrLoc = bestPastrLocations[i];
