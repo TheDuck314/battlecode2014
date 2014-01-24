@@ -1,4 +1,4 @@
-package anatid;
+package seeding;
 
 import battlecode.common.*;
 
@@ -17,7 +17,7 @@ public class BotHQ extends Bot {
 
 	protected static void init(RobotController theRC) throws GameActionException {
 		Bot.init(theRC);
-		Debug.init(rc, "suppressor");
+//		Debug.init(rc, "suppressor");
 
 		cowGrowth = rc.senseCowGrowth();
 		MessageBoard.setDefaultChannelValues();

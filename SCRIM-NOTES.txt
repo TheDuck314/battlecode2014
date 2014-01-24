@@ -6,6 +6,7 @@ ryancheu = Proxy 2 Gate
 jianty_ = Armada
 slumerville = DoYouEvenMilk
 tfk1 = quotes
+lucy = jalmad
 
 team003 - PaddleGoats
    1/21 - Rushing quite effectively. Watch game 5655 for some quiet, effective aggressive micro.
