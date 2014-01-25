@@ -55,12 +55,29 @@ public class Nav {
 		return false;
 	}
 
-	private static void startBug() {
+	private static void startBug() throws GameActionException {
 		bugStartDistSq = rc.getLocation().distanceSquaredTo(dest);
 		bugLastMoveDir = rc.getLocation().directionTo(dest);
 		bugLookStartDir = rc.getLocation().directionTo(dest);
 		bugRotationCount = 0;
 		bugMovesSinceSeenObstacle = 0;
+
+		// try to intelligently choose on which side we will keep the wall
+		Direction leftTryDir = bugLastMoveDir.rotateLeft();
+		for (int i = 0; i < 3; i++) {
+			if (!canMoveSafely(leftTryDir) || !moveIsAllowedByEngagementRules(leftTryDir)) leftTryDir = leftTryDir.rotateLeft();
+			else break;
+		}
+		Direction rightTryDir = bugLastMoveDir.rotateRight();
+		for (int i = 0; i < 3; i++) {
+			if (!canMoveSafely(rightTryDir) || !moveIsAllowedByEngagementRules(rightTryDir)) rightTryDir = rightTryDir.rotateRight();
+			else break;
+		}
+		if (dest.distanceSquaredTo(rc.getLocation().add(leftTryDir)) < dest.distanceSquaredTo(rc.getLocation().add(rightTryDir))) {
+			bugWallSide = WallSide.RIGHT;
+		} else {
+			bugWallSide = WallSide.LEFT;
+		}
 	}
 
 	private static Direction findBugMoveDir() throws GameActionException {
@@ -94,8 +111,8 @@ public class Nav {
 		move(dir);
 		bugRotationCount += calculateBugRotation(dir);
 		bugLastMoveDir = dir;
-		//if (bugWallSide == WallSide.LEFT) bugLookStartDir = dir.isDiagonal() ? dir.rotateLeft().rotateLeft() : dir.rotateLeft();
-		//else bugLookStartDir = dir.isDiagonal() ? dir.rotateRight().rotateRight() : dir.rotateRight();
+		// if (bugWallSide == WallSide.LEFT) bugLookStartDir = dir.isDiagonal() ? dir.rotateLeft().rotateLeft() : dir.rotateLeft();
+		// else bugLookStartDir = dir.isDiagonal() ? dir.rotateRight().rotateRight() : dir.rotateRight();
 		if (bugWallSide == WallSide.LEFT) bugLookStartDir = dir.rotateLeft().rotateLeft();
 		else bugLookStartDir = dir.rotateRight().rotateRight();
 	}
@@ -114,7 +131,7 @@ public class Nav {
 		}
 	}
 
-	private static void reverseBugWallFollowDir() {
+	private static void reverseBugWallFollowDir() throws GameActionException {
 		bugWallSide = (bugWallSide == WallSide.LEFT ? WallSide.RIGHT : WallSide.LEFT);
 		startBug();
 	}

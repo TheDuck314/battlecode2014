@@ -1,7 +1,5 @@
 package zephyr;
 
-import java.util.ArrayList;
-
 import battlecode.common.*;
 
 public class BotSoldier extends Bot {
@@ -19,7 +17,7 @@ public class BotSoldier extends Bot {
 
 	protected static void init(RobotController theRC) throws GameActionException {
 		Bot.init(theRC);
-		// Debug.init(theRC, "nav");
+		Debug.init(theRC, "nav");
 		Nav.init(theRC);
 
 		spawnOrder = MessageBoard.SPAWN_COUNT.readInt();
