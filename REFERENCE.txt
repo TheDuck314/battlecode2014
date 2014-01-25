@@ -1,6 +1,0 @@
-Robot stats:
-              Attack Range^2    Sensor Range^2    HP
-HQ                  15 (3x2)         35 (5x3)
-Soldier             10 (3x1)         35 (5x3)    100
-Noise Tower        400 (20)          35 (5x3)
-Pastr
