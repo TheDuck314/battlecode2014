@@ -19,6 +19,7 @@ public class BotHQ extends Bot {
 		Bot.init(theRC);
 		Debug.init(rc, "path");
 		Dijkstra.init(theRC);
+		Astar.init(theRC);
 
 		cowGrowth = rc.senseCowGrowth();
 		MessageBoard.setDefaultChannelValues();
@@ -577,6 +578,11 @@ public class BotHQ extends Bot {
 		Direction startDir = ourHQ.directionTo(theirHQ);
 		if (startDir.isDiagonal()) startDir = startDir.rotateRight();
 
+		if (rallyLoc != null) {
+			Direction dir = Bfs.readResult(ourHQ, rallyLoc);
+			if (dir != null) startDir = dir;
+		}
+
 		// We prefer to spawn on orthogonal directions; this is slightly better for the hq pastr strat
 		int[] offsets = new int[] { 0, 2, 4, 6, 1, 3, 5, 7 };
 		for (int i = 0; i < offsets.length; i++) {
@@ -592,7 +598,7 @@ public class BotHQ extends Bot {
 	}
 
 	private static void pathfindWithSpareBytecodes() throws GameActionException {
-		int bytecodeLimit = 8300;
+		int bytecodeLimit = 8500;
 
 		if (Clock.getBytecodeNum() > bytecodeLimit) return;
 		if (rallyLoc != null) Bfs.work(rallyLoc, Bfs.PRIORITY_HIGH, bytecodeLimit);
@@ -607,11 +613,15 @@ public class BotHQ extends Bot {
 			if (Clock.getBytecodeNum() > bytecodeLimit) return;
 			Bfs.work(theirPastrs[i], Bfs.PRIORITY_LOW, bytecodeLimit);
 		}
-		
-		// If we completely run out of things to do, do Dijkstra to the rally point to refine the BFS path
+
+		// // If we completely run out of things to do, do Dijkstra to the rally point to refine the BFS path
+		// bytecodeLimit = 8200;
+		// if (Clock.getBytecodeNum() > bytecodeLimit) return;
+		// if (rallyLoc != null) Dijkstra.work(rallyLoc, Bfs.PRIORITY_HIGH, bytecodeLimit);
+
 		bytecodeLimit = 8200;
 		if (Clock.getBytecodeNum() > bytecodeLimit) return;
-		if (rallyLoc != null) Dijkstra.work(rallyLoc, Bfs.PRIORITY_HIGH, bytecodeLimit);
+		if (rallyLoc != null) Astar.work(rallyLoc, Bfs.PRIORITY_HIGH, bytecodeLimit);
 	}
 
 }
