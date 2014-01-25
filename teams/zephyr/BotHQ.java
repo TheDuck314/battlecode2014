@@ -17,7 +17,8 @@ public class BotHQ extends Bot {
 
 	protected static void init(RobotController theRC) throws GameActionException {
 		Bot.init(theRC);
-//		Debug.init(rc, "suppressor");
+		Debug.init(rc, "path");
+		Dijkstra.init(theRC);
 
 		cowGrowth = rc.senseCowGrowth();
 		MessageBoard.setDefaultChannelValues();
@@ -591,7 +592,7 @@ public class BotHQ extends Bot {
 	}
 
 	private static void pathfindWithSpareBytecodes() throws GameActionException {
-		int bytecodeLimit = 9000;
+		int bytecodeLimit = 8300;
 
 		if (Clock.getBytecodeNum() > bytecodeLimit) return;
 		if (rallyLoc != null) Bfs.work(rallyLoc, Bfs.PRIORITY_HIGH, bytecodeLimit);
@@ -606,6 +607,11 @@ public class BotHQ extends Bot {
 			if (Clock.getBytecodeNum() > bytecodeLimit) return;
 			Bfs.work(theirPastrs[i], Bfs.PRIORITY_LOW, bytecodeLimit);
 		}
+		
+		// If we completely run out of things to do, do Dijkstra to the rally point to refine the BFS path
+		bytecodeLimit = 8200;
+		if (Clock.getBytecodeNum() > bytecodeLimit) return;
+		if (rallyLoc != null) Dijkstra.work(rallyLoc, Bfs.PRIORITY_HIGH, bytecodeLimit);
 	}
 
 }

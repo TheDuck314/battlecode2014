@@ -248,11 +248,11 @@ public class Nav {
 
 		if (tryMoveBfs(here)) {
 			bugState = BugState.DIRECT; // reset bug
-			// Debug.indicate("nav", 0, "using bfs");
+			Debug.indicate("nav", 0, "using bfs");
 			return;
 		}
 
-		// Debug.indicate("nav", 0, "using bug");
+		Debug.indicate("nav", 0, "using bug");
 		bugTo(dest);
 	}
 
