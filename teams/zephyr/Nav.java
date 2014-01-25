@@ -33,7 +33,17 @@ public class Nav {
 		MapLocation here = rc.getLocation();
 		Direction toDest = here.directionTo(dest);
 		Direction bestDir = null;
-		Direction[] dirs = new Direction[] { toDest, toDest.rotateLeft(), toDest.rotateRight() };
+		Direction[] dirs = new Direction[3];
+		dirs[0] = toDest;
+		Direction dirLeft = toDest.rotateLeft();
+		Direction dirRight = toDest.rotateRight();
+		if(here.add(dirLeft).distanceSquaredTo(dest) < here.add(dirRight).distanceSquaredTo(dest)) {
+			dirs[1] = dirLeft;
+			dirs[2] = dirRight;
+		} else {
+			dirs[1] = dirRight;
+			dirs[2] = dirLeft;
+		}
 		for (Direction dir : dirs) {
 			if (bestDir != null) {
 				if (rc.senseTerrainTile(here.add(dir)) != TerrainTile.ROAD) continue; // only bother with suboptimal directions if they have roads
