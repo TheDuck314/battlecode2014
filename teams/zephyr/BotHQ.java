@@ -77,6 +77,8 @@ public class BotHQ extends Bot {
 	static boolean singleSuppressorTriggered = false;
 	static int numSuppressorTargets = 0;
 
+	static boolean wearingHat = false;
+
 	private static void turn() throws GameActionException {
 		updateStrategicInfo();
 
@@ -89,6 +91,10 @@ public class BotHQ extends Bot {
 		}
 
 		if (rc.isActive()) attackEnemies();
+		if (rc.isActive() && !wearingHat && Clock.getBytecodeNum() < 4000) {
+			rc.wearHat();
+			wearingHat = true;
+		}
 		if (rc.isActive()) spawnSoldier();
 
 		directStrategy();
@@ -448,9 +454,7 @@ public class BotHQ extends Bot {
 						int numCows = 0;
 						for (int cowX = x - 2; cowX <= x + 2; cowX++) {
 							for (int cowY = y - 2; cowY <= y + 2; cowY++) {
-								if (rc.senseTerrainTile(new MapLocation(cowX, cowY)) != TerrainTile.VOID) {
-									numCows += cowGrowth[cowX][cowY];
-								}
+								numCows += cowGrowth[cowX][cowY];
 							}
 						}
 						if (numCows >= 5) {

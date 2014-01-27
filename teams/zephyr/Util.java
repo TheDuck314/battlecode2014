@@ -60,6 +60,15 @@ public class Util {
 		return ret;
 	}
 
+	public static int sumHealthOfNonConstructingSoldiers(Robot[] robots, RobotController rc) throws GameActionException {
+		int ret = 0;
+		for (int i = robots.length; i-- > 0;) {
+			RobotInfo info = rc.senseRobotInfo(robots[i]);
+			if (info.type == RobotType.SOLDIER && !info.isConstructing) ret += info.health;
+		}
+		return ret;
+	}
+
 	public static boolean containsNonConstructingSoldier(Robot[] robots, RobotController rc) throws GameActionException {
 		for (int i = robots.length; i-- > 0;) {
 			RobotInfo info = rc.senseRobotInfo(robots[i]);
@@ -147,10 +156,10 @@ public class Util {
 		return false;
 	}
 
-	public static boolean containsConstructingRobotOrNoiseTower(Robot[] robots, RobotController rc) throws GameActionException {
+	public static boolean containsConstructingRobotOrNoiseTowerExceptAtLocation(Robot[] robots, MapLocation exclude, RobotController rc) throws GameActionException {
 		for (int i = robots.length; i-- > 0;) {
 			RobotInfo info = rc.senseRobotInfo(robots[i]);
-			if (info.type == RobotType.NOISETOWER || info.isConstructing) return true;
+			if ((info.type == RobotType.NOISETOWER || info.isConstructing) && !info.location.equals(exclude)) return true;
 		}
 		return false;
 	}

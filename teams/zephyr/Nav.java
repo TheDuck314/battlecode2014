@@ -37,7 +37,7 @@ public class Nav {
 		dirs[0] = toDest;
 		Direction dirLeft = toDest.rotateLeft();
 		Direction dirRight = toDest.rotateRight();
-		if(here.add(dirLeft).distanceSquaredTo(dest) < here.add(dirRight).distanceSquaredTo(dest)) {
+		if (here.add(dirLeft).distanceSquaredTo(dest) < here.add(dirRight).distanceSquaredTo(dest)) {
 			dirs[1] = dirLeft;
 			dirs[2] = dirRight;
 		} else {
@@ -267,8 +267,13 @@ public class Nav {
 	}
 
 	private static void move(Direction dir) throws GameActionException {
-		if (sneak) rc.sneak(dir);
-		else rc.move(dir);
+		if (sneak) {
+			Debug.indicate("sneak", 1, "Nav.move sneaking");
+			rc.sneak(dir);
+		} else {
+			Debug.indicate("sneak", 1, "Nav.move moving regularly");
+			rc.move(dir);
+		}
 	}
 
 	private static boolean canMoveSafely(Direction dir) {
@@ -289,7 +294,6 @@ public class Nav {
 		int numNearbyAllies = 1 + Util.countNonConstructingSoldiers(rc.senseNearbyGameObjects(Robot.class, anEngagedEnemy.location, 29, rc.getTeam()), rc);
 		int numNearbyEnemies = Util.countNonConstructingSoldiers(rc.senseNearbyGameObjects(Robot.class, anEngagedEnemy.location, 49, rc.getTeam().opponent()),
 				rc);
-
 		boolean ret = numNearbyAllies > numNearbyEnemies;
 		fightIsWinningDecision = ret;
 		fightDecisionIsCached = true;

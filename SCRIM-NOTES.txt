@@ -1,3 +1,15 @@
+maybe need a general way to get aggressive when we have a huge numerical advantage
+probably should only build 2nd pastr if lucrative enough
+need to reconsider spamming strat; watch losses vs losingreallybadly
+watch Mann Co, losingreallybadly, jalmad for herding
+jalmad, anim0rphs for self-destruct micro
+get two-move self-destruct working
+health-based retreat decision?
+anti-self destruct micro
+emulate losingreallybadly and see when we can beat 2-pastr on big maps
+think about yuri
+if we are defending a pastr and have way more milk and are about to win, don't go into attack mode and abandon the pastr
+
 Goldob = TooMuchSwagException
 ir0x539 = Maxwell Mann Tribute Band
 slightlyeskew = Battle Cattle
