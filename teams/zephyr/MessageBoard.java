@@ -19,7 +19,8 @@ public enum MessageBoard {
 	TOWER_BUILDER_ROBOT_IDS(GameConstants.BROADCAST_MAX_CHANNELS - 40),
 	PASTR_BUILDER_ROBOT_IDS(GameConstants.BROADCAST_MAX_CHANNELS - 50),
 	SUPPRESSOR_TARGET_LOCATIONS(GameConstants.BROADCAST_MAX_CHANNELS - 60),
-	SUPPRESSOR_BUILDER_ROBOT_IDS(GameConstants.BROADCAST_MAX_CHANNELS - 70);
+	SUPPRESSOR_BUILDER_ROBOT_IDS(GameConstants.BROADCAST_MAX_CHANNELS - 70),
+	SUPPRESSOR_JOBS_FINISHED(GameConstants.BROADCAST_MAX_CHANNELS - 80);
 
 	public static void setDefaultChannelValues() throws GameActionException {
 		RALLY_LOC.writeMapLocation(null);
@@ -42,6 +43,7 @@ public enum MessageBoard {
 		for (int i = 0; i < BotHQ.MAX_SUPPRESSORS; i++) {
 			SUPPRESSOR_TARGET_LOCATIONS.writeToMapLocationList(i, null);
 			SUPPRESSOR_BUILDER_ROBOT_IDS.clearAssignment(i);
+			SUPPRESSOR_JOBS_FINISHED.writeToBooleanList(i, false);
 		}
 	}
 
@@ -95,11 +97,11 @@ public enum MessageBoard {
 	public Strategy readStrategy() throws GameActionException {
 		return Strategy.values()[readInt()];
 	}
-	
+
 	public void writeRallyGoal(BotHQ.RallyGoal rg) throws GameActionException {
 		writeInt(rg.ordinal());
 	}
-	
+
 	public BotHQ.RallyGoal readRallyGoal() throws GameActionException {
 		return BotHQ.RallyGoal.values()[readInt()];
 	}
@@ -113,6 +115,14 @@ public enum MessageBoard {
 		int data = rc.readBroadcast(channel + index);
 		if (data == -999) return null;
 		else return new MapLocation(data / GameConstants.MAP_MAX_HEIGHT, data % GameConstants.MAP_MAX_HEIGHT);
+	}
+
+	public void writeToBooleanList(int index, boolean b) throws GameActionException {
+		rc.broadcast(channel + index, b ? 1 : 0);
+	}
+
+	public boolean readFromBooleanList(int index) throws GameActionException {
+		return rc.readBroadcast(channel + index) == 1;
 	}
 
 	public void claimAssignment(int index) throws GameActionException {

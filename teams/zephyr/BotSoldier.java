@@ -145,7 +145,6 @@ public class BotSoldier extends Bot {
 
 		if (suppressorBuildAssignmentIndex != -1) {
 			MapLocation target = MessageBoard.SUPPRESSOR_TARGET_LOCATIONS.readFromMapLocationList(suppressorBuildAssignmentIndex);
-			if (tryBuildSuppressor(target)) return;
 			Nav.goTo(target, Nav.Sneak.NO, Nav.Engage.NO, countNumEnemiesAttackingMoveDirs());
 			return;
 		}
@@ -286,19 +285,27 @@ public class BotSoldier extends Bot {
 				}
 			}
 		}
-		return false;
-	}
 
-	private static boolean tryBuildSuppressor(MapLocation target) throws GameActionException {
+		// allowed to build a suppressor if we are assigned to or if we have no other assignments and are in harrass mode
+		boolean allowedToBuildSuppressor = suppressorBuildAssignmentIndex != -1;
+		if (pastrBuildAssignmentIndex == -1 && towerBuildAssignmentIndex == -1 && MessageBoard.RALLY_GOAL.readRallyGoal() == BotHQ.RallyGoal.HARRASS) {
+			allowedToBuildSuppressor = true;
+		}
 
-		if (here.distanceSquaredTo(target) <= RobotType.NOISETOWER.attackRadiusMaxSquared) {
-			if (1 + numOtherAlliedSoldiersInRange(here, RobotType.SOLDIER.sensorRadiusSquared) <= 2 * visibleEnemies.length) {
-				return true;
-			} else {
-				rc.construct(RobotType.NOISETOWER);
-				return true;
+		if (allowedToBuildSuppressor) {
+			int numSuppressors = MessageBoard.NUM_SUPPRESSORS.readInt();
+			for (int i = 0; i < numSuppressors; i++) {
+				if (!MessageBoard.SUPPRESSOR_JOBS_FINISHED.readFromBooleanList(i)) {
+					MapLocation suppressorTarget = MessageBoard.SUPPRESSOR_TARGET_LOCATIONS.readFromMapLocationList(i);
+					if (here.distanceSquaredTo(suppressorTarget) <= RobotType.NOISETOWER.attackRadiusMaxSquared) {
+						MessageBoard.SUPPRESSOR_BUILDER_ROBOT_IDS.claimAssignment(i);
+						rc.construct(RobotType.NOISETOWER);
+						return true;
+					}
+				}
 			}
 		}
+
 		return false;
 	}
 
@@ -865,9 +872,9 @@ public class BotSoldier extends Bot {
 				}
 			}
 			double damageTaken = numAttacksSuffered * RobotType.SOLDIER.attackPower;
-//			Debug.indicate("selfdestruct", 1,
-//					String.format("considering self-destruct: numVulnerableTurrns = %d, numAttacksSuffered = %d,", numVulnerableTurns, numAttacksSuffered));
-//			Debug.indicate("selfdestruct", 2, String.format("health = %f, damageTaken = %f", rc.getHealth(), damageTaken));
+			// Debug.indicate("selfdestruct", 1,
+			// String.format("considering self-destruct: numVulnerableTurrns = %d, numAttacksSuffered = %d,", numVulnerableTurns, numAttacksSuffered));
+			// Debug.indicate("selfdestruct", 2, String.format("health = %f, damageTaken = %f", rc.getHealth(), damageTaken));
 			if (rc.getHealth() > damageTaken) {
 				double actualMaxDamage = GameConstants.SELF_DESTRUCT_BASE_DAMAGE + GameConstants.SELF_DESTRUCT_DAMAGE_FACTOR * (rc.getHealth() - damageTaken);
 				double actualTotalDamageDealt = 0;

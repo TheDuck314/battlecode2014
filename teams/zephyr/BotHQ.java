@@ -91,7 +91,7 @@ public class BotHQ extends Bot {
 		}
 
 		if (rc.isActive()) attackEnemies();
-		if (rc.isActive() && !wearingHat && Clock.getBytecodeNum() < 4000) {
+		if (rc.isActive() && !wearingHat && Clock.getBytecodeNum() < 3000) {
 			rc.wearHat();
 			wearingHat = true;
 		}
@@ -114,9 +114,9 @@ public class BotHQ extends Bot {
 			boolean safe = true;
 			computePastrScores(repel, safe);
 			computeOneGoodPastrLocation();
-			if (Strategy.active == Strategy.SCATTER || Strategy.active == Strategy.SCATTER_SUPPRESSOR) {
-				computeSecondGoodPastrLocation();
-			}
+			// if (Strategy.active == Strategy.SCATTER || Strategy.active == Strategy.SCATTER_SUPPRESSOR) {
+			// computeSecondGoodPastrLocation();
+			// }
 			broadcastBestPastrLocations();
 		}
 	}
@@ -140,7 +140,7 @@ public class BotHQ extends Bot {
 		if (mapSize < 60) {
 			return Strategy.RUSH;
 		} else {
-			return Strategy.SCATTER;
+			return Strategy.SCATTER_SUPPRESSOR;
 		}
 	}
 
@@ -169,6 +169,7 @@ public class BotHQ extends Bot {
 		boolean[] towerBuildersAlive = new boolean[numPastrLocations];
 		boolean[] pastrBuildersAlive = new boolean[numPastrLocations];
 		boolean[] suppressorBuildersAlive = new boolean[numSuppressorTargets];
+		boolean[] suppressorJobsFinished = new boolean[numSuppressorTargets];
 		for (int i = allAlliedRobots.length; i-- > 0;) {
 			Robot ally = allAlliedRobots[i];
 			RobotInfo info = rc.senseRobotInfo(ally);
@@ -180,7 +181,13 @@ public class BotHQ extends Bot {
 				if (id == MessageBoard.PASTR_BUILDER_ROBOT_IDS.readCurrentAssignedID(j)) pastrBuildersAlive[j] = true;
 			}
 			for (int j = 0; j < numSuppressorTargets; j++) {
-				if (id == MessageBoard.SUPPRESSOR_BUILDER_ROBOT_IDS.readCurrentAssignedID(j)) suppressorBuildersAlive[j] = true;
+				if (id == MessageBoard.SUPPRESSOR_BUILDER_ROBOT_IDS.readCurrentAssignedID(j)) {
+					suppressorBuildersAlive[j] = true;
+					// check if this robot has fulfilled the suppressor order (so that no one else should try to steal the job):
+					if (info.type == RobotType.NOISETOWER || info.isConstructing) {
+						suppressorJobsFinished[j] = true;
+					}
+				}
 			}
 		}
 
@@ -190,6 +197,7 @@ public class BotHQ extends Bot {
 		}
 		for (int i = 0; i < numSuppressorTargets; i++) {
 			if (!suppressorBuildersAlive[i]) MessageBoard.SUPPRESSOR_BUILDER_ROBOT_IDS.clearAssignment(i);
+			MessageBoard.SUPPRESSOR_JOBS_FINISHED.writeToBooleanList(i, suppressorJobsFinished[i]);
 		}
 
 		ourMilk = rc.senseTeamMilkQuantity(us);
