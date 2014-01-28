@@ -1,4 +1,4 @@
-package zephyr;
+package zephyr26;
 
 import java.util.ArrayList;
 
@@ -19,7 +19,7 @@ public class BotSoldier extends Bot {
 
 	protected static void init(RobotController theRC) throws GameActionException {
 		Bot.init(theRC);
-		// Debug.init(theRC, "stance");
+//		Debug.init(theRC, "selfdestruct");
 		Nav.init(theRC);
 
 		spawnOrder = MessageBoard.SPAWN_COUNT.readInt();
@@ -40,7 +40,6 @@ public class BotSoldier extends Bot {
 	static MicroStance stance;
 
 	static MapLocation here;
-	static double health;
 	static RobotInfo[] visibleEnemies; // enemies within vision radius (35)
 	static RobotInfo[] attackableEnemies; // enemies within attack radius(10)
 	static int numNonConstructingSoldiersAttackingUs;
@@ -49,7 +48,6 @@ public class BotSoldier extends Bot {
 	static boolean tryingSelfDestruct = false;
 	static boolean beVeryCautious = false;
 	static boolean inHealingState = false;
-	static boolean needToClearOutRallyBeforeDefending = false;
 
 	static int spawnOrder;
 
@@ -62,7 +60,6 @@ public class BotSoldier extends Bot {
 
 	private static void turn() throws GameActionException {
 		here = rc.getLocation();
-		health = rc.getHealth();
 		if (!rc.isActive()) {
 			// can self-destruct even with large actiondelay:
 			if (tryingSelfDestruct) {
@@ -110,11 +107,11 @@ public class BotSoldier extends Bot {
 			}
 		}
 
-		if (health < 20) {
+		if (rc.getHealth() < 20) {
 			inHealingState = true;
 			Debug.indicate("heal", 0, "entering healing state");
 		}
-		if (health > 60) {
+		if (rc.getHealth() > 60) {
 			inHealingState = false;
 			Debug.indicate("heal", 0, "leaving healing state");
 		}
@@ -252,7 +249,7 @@ public class BotSoldier extends Bot {
 	}
 
 	private static boolean tryBuildSomething() throws GameActionException {
-		if (numOtherNonConstructingAlliedSoldiersInRange(here, RobotType.SOLDIER.sensorRadiusSquared) <= 2 * visibleEnemies.length) return false;
+		if (1 + numOtherAlliedSoldiersInRange(here, RobotType.SOLDIER.sensorRadiusSquared) <= 2 * visibleEnemies.length) return false;
 
 		for (int i = 0; i < numPastrLocations; i++) {
 			MapLocation pastrLoc = bestPastrLocations[i];
@@ -348,7 +345,7 @@ public class BotSoldier extends Bot {
 	}
 
 	private static boolean trySelfDestruct() throws GameActionException {
-		double maxDamage = GameConstants.SELF_DESTRUCT_BASE_DAMAGE + GameConstants.SELF_DESTRUCT_DAMAGE_FACTOR * health;
+		double maxDamage = GameConstants.SELF_DESTRUCT_BASE_DAMAGE + GameConstants.SELF_DESTRUCT_DAMAGE_FACTOR * rc.getHealth();
 		double damageDealt = 0;
 		for (RobotInfo info : attackableEnemies) {
 			if (info.location.isAdjacentTo(here) && info.type == RobotType.SOLDIER && !info.isConstructing) {
@@ -356,7 +353,8 @@ public class BotSoldier extends Bot {
 			}
 		}
 		damageDealt -= maxDamage * rc.senseNearbyGameObjects(Robot.class, here, 2, us).length;
-		if (damageDealt > health * 1.5 || (damageDealt > health && health < 1.5 * RobotType.SOLDIER.attackPower * numNonConstructingSoldiersAttackingUs)) {
+		if (damageDealt > rc.getHealth() * 1.5
+				|| (damageDealt > rc.getHealth() && rc.getHealth() < 1.5 * RobotType.SOLDIER.attackPower * numNonConstructingSoldiersAttackingUs)) {
 			MessageBoard.SELF_DESTRUCT_LOCKOUT_ROUND.writeInt(0); // OK to others to self-destruct now
 			rc.selfDestruct();
 			return true;
@@ -367,22 +365,8 @@ public class BotSoldier extends Bot {
 	private static MicroStance chooseMicroStance(MapLocation rallyLoc, BotHQ.RallyGoal rallyGoal) {
 		switch (rallyGoal) {
 			case DEFEND:
-				needToClearOutRallyBeforeDefending = false;
-				Debug.indicate("stance", 0, "rallyGoal = DEFEND");
-				if (here.distanceSquaredTo(rallyLoc) > 64) {
-					Debug.indicate("stance", 1, "aggressive to punch through");
-					return MicroStance.AGGRESSIVE; // punch through to our pastr
-				}
-				// We are close to the rally point. But if there is still an enemy between us and the rally point, we have to be aggressive
-				MapLocation ahead = here.add(here.directionTo(rallyLoc), 2);
-				if (rc.senseNearbyGameObjects(Robot.class, ahead, RobotType.SOLDIER.attackRadiusMaxSquared, them).length > 0) {
-					Debug.indicate("stance", 1, "aggressive to clear out");
-					needToClearOutRallyBeforeDefending = true;
-					return MicroStance.AGGRESSIVE;
-				}
-				// Otherwise, we have made it to the pastr and can be defensive
-				Debug.indicate("stance", 1, "defensive");
-				return MicroStance.DEFENSIVE; // defend the pastr
+				if (here.distanceSquaredTo(rallyLoc) > 64) return MicroStance.AGGRESSIVE; // punch through to our pastr
+				else return MicroStance.DEFENSIVE; // defend the pastr
 
 			case DESTROY:
 				return MicroStance.AGGRESSIVE; // let nothing stand in our way
@@ -406,7 +390,6 @@ public class BotSoldier extends Bot {
 		switch (rallyGoal) {
 			case GATHER:
 			case DEFEND:
-				if (needToClearOutRallyBeforeDefending) return false;
 				if (here.distanceSquaredTo(rallyLoc) <= 36) {
 					MapLocation closestEnemy = Util.closestNonHQ(visibleEnemies, rc);
 					if (closestEnemy == null) return false;
@@ -444,6 +427,13 @@ public class BotSoldier extends Bot {
 
 	// obligatory micro is attacks or movements that we have to do because either we or a nearby ally is in combat
 	private static boolean doObligatoryMicro() throws GameActionException {
+		// if (numNonConstructingSoldiersAttackingUs >= 1) {
+		// if (fleeSelfDestruct()) {
+		// Debug.indicate("micro", 0, "fleeing self-destruct");
+		// return true;
+		// }
+		// }
+
 		// Decide whether to try to move in for a self-destruct
 		if (Clock.getRoundNum() >= MessageBoard.SELF_DESTRUCT_LOCKOUT_ROUND.readInt()
 				|| rc.getRobot().getID() == MessageBoard.SELF_DESTRUCT_LOCKOUT_ID.readInt()) {
@@ -463,9 +453,17 @@ public class BotSoldier extends Bot {
 			// Debug.indicate("micro", 0, "locked out of self-destruct");
 		}
 
-		if (numNonConstructingSoldiersAttackingUs >= 1) {
-			if (fleeSelfDestruct()) {
-				Debug.indicate("micro", 0, "fleeing self-destruct");
+		if (inHealingState) {
+			Debug.indicate("heal", 1, "micro: low health, fleeing");
+			boolean tooClose = false;
+			for (RobotInfo enemy : visibleEnemies) {
+				if (enemy.type == RobotType.SOLDIER && !enemy.isConstructing && here.distanceSquaredTo(enemy.location) <= 20) {
+					tooClose = true;
+					break;
+				}
+			}
+			if (tooClose) {
+				fleeWithLowHealth();
 				return true;
 			}
 		}
@@ -483,12 +481,12 @@ public class BotSoldier extends Bot {
 				if (maxAlliesAttackingEnemy == 1) {
 					// we are in a 1v1. fight if we are winning, otherwise retreat
 					RobotInfo singleEnemy = Util.findANonConstructingSoldier(attackableEnemies);
-					boolean weAreWinning1v1 = health >= singleEnemy.health;
+					boolean weAreWinning1v1 = rc.getHealth() >= singleEnemy.health;
 					if (weAreWinning1v1) {
 						Debug.indicate("micro", 0, "attacking in winning 1v1");
 						attackAndRecord(singleEnemy);
 					} else {
-						if (!inHealingState && stance == MicroStance.AGGRESSIVE && guessIfFightIsWinning()) {
+						if (stance == MicroStance.AGGRESSIVE && guessIfFightIsWinning()) {
 							Debug.indicate("micro", 0, "remaining in losing 1v1 because we are aggressive and fight is winning");
 							attackAndRecord(singleEnemy);
 						} else {
@@ -497,16 +495,10 @@ public class BotSoldier extends Bot {
 						}
 					}
 				} else {
-					// we outnumber the lone enemy.
+					// we outnumber the lone enemy. kill him
 					RobotInfo singleEnemy = Util.findANonConstructingSoldier(attackableEnemies);
-					if (inHealingState && health < singleEnemy.health) {
-						// if we are trying to heal, don't stay in the fight if we have less health than the enemy
-						retreatOrFight();
-					} else {
-						// otherwise kill the enemy
-						Debug.indicate("micro", 0, "attacking outnumbered lone enemy");
-						attackAndRecord(singleEnemy);
-					}
+					Debug.indicate("micro", 0, "attacking outnumbered lone enemy");
+					attackAndRecord(singleEnemy);
 				}
 			} else if (!guessIfFightIsWinning() && numNonConstructingSoldiersAttackingUs > maxAlliesAttackingEnemy || stance == MicroStance.SAFE) {
 				// We are getting doubled teamed too badly.
@@ -524,7 +516,7 @@ public class BotSoldier extends Bot {
 			// we can attack a soldier who is attacking them. Then we have to decide whether to move to attack such a soldier
 			// and if so which one. Actually, there is one other thing that is obligatory, which is to move to attack
 			// helpless enemies (buildings and constructing soldiers) if it is safe to do so.
-			if (stance != MicroStance.SAFE && !inHealingState) {
+			if (stance != MicroStance.SAFE) {
 				MapLocation closestEnemySoldier = Util.closestNonConstructingSoldier(visibleEnemies, here);
 				if (closestEnemySoldier != null) {
 					// int numAlliesFighting = numOtherAlliedSoldiersInAttackRange(closestEnemySoldier);
@@ -565,22 +557,6 @@ public class BotSoldier extends Bot {
 				return true;
 			}
 
-			// If we are trying to heal, don't let anyone with more health than us get too close
-			if (inHealingState) {
-				Debug.indicate("heal", 1, "micro: low health, fleeing");
-				boolean tooClose = false;
-				for (RobotInfo enemy : visibleEnemies) {
-					if (enemy.type == RobotType.SOLDIER && !enemy.isConstructing && here.distanceSquaredTo(enemy.location) <= 20 && enemy.health > health) {
-						tooClose = true;
-						break;
-					}
-				}
-				if (tooClose) {
-					fleeWithLowHealth();
-					return true;
-				}
-			}
-
 			// If none of the above cases compelled us to action, there is no obligatory action
 			return false;
 		}
@@ -601,11 +577,14 @@ public class BotSoldier extends Bot {
 		}
 	}
 
+	private static Direction[] selfDestructFleeDirections = { Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST, Direction.NORTH_EAST,
+			Direction.SOUTH_EAST, Direction.SOUTH_WEST, Direction.NORTH_WEST };
+
 	private static boolean fleeSelfDestruct() throws GameActionException {
 		RobotInfo adjacentEnemySoldier = null;
 		for (RobotInfo info : attackableEnemies) {
 			if (info.type != RobotType.SOLDIER || info.isConstructing) continue;
-			if (info.location.isAdjacentTo(here) && info.health > RobotType.SOLDIER.attackPower) {
+			if (info.location.isAdjacentTo(here)) {
 				adjacentEnemySoldier = info;
 				break;
 			}
@@ -613,26 +592,19 @@ public class BotSoldier extends Bot {
 		if (adjacentEnemySoldier == null) return false;
 		Debug.indicate("flee", 0, "adjacent enemy soldier at " + adjacentEnemySoldier.location.toString());
 
-		// Robot[] endangeredAllies = rc.senseNearbyGameObjects(Robot.class, adjacentEnemySoldier.location, 2, us);
-		// double totalEndangeredAlliedHealth = health;
-		// for (Robot ally : endangeredAllies) {
-		// totalEndangeredAlliedHealth += rc.senseRobotInfo(ally).health;
-		// }
-		//
-		// // If he risks more health than us, let him self-destruct, we don't care
-		// if (totalEndangeredAlliedHealth <= adjacentEnemySoldier.health) return false;
+		Robot[] endangeredAllies = rc.senseNearbyGameObjects(Robot.class, adjacentEnemySoldier.location, 2, us);
+		double totalEndangeredAlliedHealth = rc.getHealth();
+		for (Robot ally : endangeredAllies) {
+			totalEndangeredAlliedHealth += rc.senseRobotInfo(ally).health;
+		}
+
+		// If he risks more health than us, let him self-destruct, we don't care
+		if (totalEndangeredAlliedHealth <= adjacentEnemySoldier.health) return false;
 
 		Direction bestFleeDir = null;
 		int fewestAttackers = 99;
 		int[] numEnemiesAttackingMoveDirs = countNumEnemiesAttackingMoveDirs();
-		Direction away = adjacentEnemySoldier.location.directionTo(here);
-		Direction[] fleeDirs;
-		if (away.isDiagonal()) {
-			fleeDirs = new Direction[] { away, away.rotateLeft(), away.rotateRight(), away.rotateLeft().rotateLeft(), away.rotateRight().rotateRight() };
-		} else {
-			fleeDirs = new Direction[] { away, away.rotateLeft(), away.rotateRight() };
-		}
-		for (Direction fleeDir : fleeDirs) {
+		for (Direction fleeDir : selfDestructFleeDirections) {
 			if (!rc.canMove(fleeDir)) continue;
 			if (here.add(fleeDir).isAdjacentTo(adjacentEnemySoldier.location)) continue;
 			int numAttackers = numEnemiesAttackingMoveDirs[fleeDir.ordinal()];
@@ -786,7 +758,7 @@ public class BotSoldier extends Bot {
 	// @formatter:on
 
 	private static boolean tryMoveForSelfDestruct() throws GameActionException {
-		double maxDamage = GameConstants.SELF_DESTRUCT_BASE_DAMAGE + GameConstants.SELF_DESTRUCT_DAMAGE_FACTOR * health;
+		double maxDamage = GameConstants.SELF_DESTRUCT_BASE_DAMAGE + GameConstants.SELF_DESTRUCT_DAMAGE_FACTOR * rc.getHealth();
 		double[] moveScores = new double[8];
 		for (RobotInfo info : attackableEnemies) {
 			if (info.type != RobotType.SOLDIER || info.isConstructing) continue;
@@ -796,7 +768,7 @@ public class BotSoldier extends Bot {
 				moveScores[dir] += score;
 			}
 		}
-		double bestScore = 1.5 * health;
+		double bestScore = 1.5 * rc.getHealth();
 		int bestDir = -1;
 		Direction[] dirs = Direction.values();
 		for (int i = 8; i-- > 0;) {
@@ -806,10 +778,10 @@ public class BotSoldier extends Bot {
 			}
 		}
 		if (bestDir != -1) {
-			// make sure we won't hit an ally or step into HQ attack range
-			MapLocation dest = here.add(dirs[bestDir]);
-			if (!Bot.isInTheirHQAttackRange(dest) && rc.senseNearbyGameObjects(Robot.class, dest, 2, us).length == 0) {
+			// make sure we won't hit an ally
+			if (rc.senseNearbyGameObjects(Robot.class, here.add(dirs[bestDir]), 2, us).length == 0) {
 				// check if we think we can survive the charge
+				MapLocation dest = here.add(dirs[bestDir]);
 				int numAttacksSuffered = 0;
 				for (RobotInfo enemy : visibleEnemies) {
 					if (enemy.type != RobotType.SOLDIER || enemy.isConstructing) continue;
@@ -820,8 +792,8 @@ public class BotSoldier extends Bot {
 				double requiredHealth = numAttacksSuffered * RobotType.SOLDIER.attackPower;
 				Debug.indicate("selfdestruct", 1,
 						String.format("considering one-move self-destruct: numVulnerableTurns = %d, numAttacksSuffered = %d,", 1, numAttacksSuffered));
-				Debug.indicate("selfdestruct", 2, String.format("health = %f, requiredHealth = %f", health, requiredHealth));
-				if (health > requiredHealth) {
+				Debug.indicate("selfdestruct", 2, String.format("health = %f, requiredHealth = %f", rc.getHealth(), requiredHealth));
+				if (rc.getHealth() > requiredHealth) {
 					rc.move(dirs[bestDir]);
 					// Tell others not to go for a self-destruct until the round after we self-destruct
 					MessageBoard.SELF_DESTRUCT_LOCKOUT_ID.writeInt(rc.getRobot().getID());
@@ -834,11 +806,11 @@ public class BotSoldier extends Bot {
 	}
 
 	private static boolean tryMoveForTwoMoveSelfDestruct() throws GameActionException {
-		// if (health < 50) return false;
+		// if (rc.getHealth() < 50) return false;
 
 		Debug.indicate("selfdestruct", 0, "2move called");
 
-		double maxDamage = GameConstants.SELF_DESTRUCT_BASE_DAMAGE + GameConstants.SELF_DESTRUCT_DAMAGE_FACTOR * health;
+		double maxDamage = GameConstants.SELF_DESTRUCT_BASE_DAMAGE + GameConstants.SELF_DESTRUCT_DAMAGE_FACTOR * rc.getHealth();
 		int numPaths = twoMoveSelfDestructPaths.length;
 		double[] pathScores = new double[numPaths];
 		for (RobotInfo info : visibleEnemies) {
@@ -859,7 +831,7 @@ public class BotSoldier extends Bot {
 		for (int i = 0; i < numPaths; i++) {
 			Debug.indicateAppend("micro", 1, " " + (int) pathScores[i]);
 		}
-		double bestScore = 1.5 * health;
+		double bestScore = 1.5 * rc.getHealth();
 		int bestPath = -1;
 		for (int i = 0; i < numPaths; i++) {
 			Direction[] path = twoMoveSelfDestructPaths[i];
@@ -875,8 +847,6 @@ public class BotSoldier extends Bot {
 			Direction move1 = path[0];
 			Direction move2 = path[1];
 			MapLocation dest = here.add(move1).add(move2);
-
-			if (Bot.isInTheirHQAttackRange(dest)) return false;
 
 			double totalActionDelay = twoMoveSelfDestructPathActionDelay[bestPath];
 			if (rc.senseTerrainTile(here) == TerrainTile.ROAD) totalActionDelay *= GameConstants.ROAD_ACTION_DELAY_FACTOR;
@@ -905,14 +875,14 @@ public class BotSoldier extends Bot {
 			double damageTaken = numAttacksSuffered * RobotType.SOLDIER.attackPower;
 			// Debug.indicate("selfdestruct", 1,
 			// String.format("considering self-destruct: numVulnerableTurrns = %d, numAttacksSuffered = %d,", numVulnerableTurns, numAttacksSuffered));
-			// Debug.indicate("selfdestruct", 2, String.format("health = %f, damageTaken = %f", health, damageTaken));
-			if (health > damageTaken) {
-				double actualMaxDamage = GameConstants.SELF_DESTRUCT_BASE_DAMAGE + GameConstants.SELF_DESTRUCT_DAMAGE_FACTOR * (health - damageTaken);
+			// Debug.indicate("selfdestruct", 2, String.format("health = %f, damageTaken = %f", rc.getHealth(), damageTaken));
+			if (rc.getHealth() > damageTaken) {
+				double actualMaxDamage = GameConstants.SELF_DESTRUCT_BASE_DAMAGE + GameConstants.SELF_DESTRUCT_DAMAGE_FACTOR * (rc.getHealth() - damageTaken);
 				double actualTotalDamageDealt = 0;
 				for (int i = 0; i < numTargets; i++) {
 					actualTotalDamageDealt += Math.min(actualMaxDamage, targetHealths[i]);
 				}
-				if (actualTotalDamageDealt >= 1.3 * health) {
+				if (actualTotalDamageDealt >= 1.3 * rc.getHealth()) {
 					Debug.indicate("selfdestruct", 2, String.format("actualTotalDamageDealt = %f: going for it", actualTotalDamageDealt));
 					rc.move(twoMoveSelfDestructPaths[bestPath][0]);
 					// Tell others not to go for a self-destruct right now
@@ -1064,16 +1034,15 @@ public class BotSoldier extends Bot {
 		}
 	}
 
-	private static int numOtherNonConstructingAlliedSoldiersInAttackRange(MapLocation loc) throws GameActionException {
-		return numOtherNonConstructingAlliedSoldiersInRange(loc, RobotType.SOLDIER.attackRadiusMaxSquared);
+	private static int numOtherAlliedSoldiersInAttackRange(MapLocation loc) throws GameActionException {
+		return numOtherAlliedSoldiersInRange(loc, RobotType.SOLDIER.attackRadiusMaxSquared);
 	}
 
-	private static int numOtherNonConstructingAlliedSoldiersInRange(MapLocation loc, int rangeSq) throws GameActionException {
+	private static int numOtherAlliedSoldiersInRange(MapLocation loc, int rangeSq) throws GameActionException {
 		int numAlliedSoldiers = 0;
 		Robot[] allies = rc.senseNearbyGameObjects(Robot.class, loc, rangeSq, us);
 		for (int i = allies.length; i-- > 0;) {
-			RobotInfo info = rc.senseRobotInfo(allies[i]);
-			if (info.type == RobotType.SOLDIER && !info.isConstructing) numAlliedSoldiers++;
+			if (rc.senseRobotInfo(allies[i]).type == RobotType.SOLDIER) numAlliedSoldiers++;
 		}
 		return numAlliedSoldiers;
 	}
@@ -1091,7 +1060,7 @@ public class BotSoldier extends Bot {
 		for (int i = enemies.length; i-- > 0;) {
 			RobotInfo info = enemies[i];
 			if (info.type != RobotType.SOLDIER || info.isConstructing) continue;
-			int numNearbyAllies = 1 + numOtherNonConstructingAlliedSoldiersInAttackRange(info.location);
+			int numNearbyAllies = 1 + numOtherAlliedSoldiersInAttackRange(info.location);
 			double turnsToKill = info.health / numNearbyAllies;
 			if (turnsToKill < bestTurnsToKill) {
 				bestTurnsToKill = turnsToKill;
@@ -1124,15 +1093,15 @@ public class BotSoldier extends Bot {
 		RobotType bestType = RobotType.SOLDIER;
 		for (int i = attackableEnemies.length; i-- > 0;) {
 			RobotInfo info = attackableEnemies[i];
-			RobotType targetType = info.type;
-			if (targetType == bestType) { // break ties between equal types by health
-				double targetHealth = info.health;
-				if (targetHealth < bestHealth) {
-					bestHealth = targetHealth;
+			RobotType type = info.type;
+			if (type == bestType) { // break ties between equal types by health
+				double health = info.health;
+				if (health < bestHealth) {
+					bestHealth = health;
 					ret = info;
 				}
-			} else if (targetType == RobotType.PASTR || bestType == RobotType.SOLDIER) { // prefer pastrs to noise towers to constructing soldiers
-				bestType = targetType;
+			} else if (type == RobotType.PASTR || bestType == RobotType.SOLDIER) { // prefer pastrs to noise towers to constructing soldiers
+				bestType = type;
 				bestHealth = info.health;
 				ret = info;
 			}

@@ -1,4 +1,4 @@
-package zephyr;
+package zephyr26;
 
 import battlecode.common.*;
 
@@ -136,7 +136,6 @@ public class BotNoiseTower extends Bot {
 	static Direction attackDir = Direction.NORTH;
 	static int radius = attackDir.isDiagonal() ? maxDiagonalRadius : maxOrthogonalRadius;
 	// static final int[] nextDumbHerdDir = new int[] { 2, 3, 4, 5, 6, 7, 1, 0 };
-	// static final int[] nextDumbHerdDir = new int[] { 3, 0, 5, 2, 7, 4, 1, 6 }; //approximates proxy's seeding tournament pattern
 	static final int[] nextDumbHerdDir = new int[] { 1, 2, 3, 4, 5, 6, 7, 0 };
 
 	private static void herdTowardPastrDumb() throws GameActionException {
@@ -148,7 +147,7 @@ public class BotNoiseTower extends Bot {
 			target = new MapLocation(pastr.x + dx, pastr.y + dy);
 
 			radius--;
-			if (radius <= (attackDir.isDiagonal() ? 5 : 6)) {
+			if (radius <= (attackDir.isDiagonal() ? 3 : 5)) {
 				attackDir = Direction.values()[nextDumbHerdDir[attackDir.ordinal()]];
 				radius = attackDir.isDiagonal() ? maxDiagonalRadius : maxOrthogonalRadius;
 			}
@@ -158,8 +157,8 @@ public class BotNoiseTower extends Bot {
 	}
 
 	private static boolean tooFarOffMap(MapLocation loc) {
-		int W = 3;
-		return loc.x < -W || loc.y < -W || loc.x >= mapWidth + W || loc.y >= mapHeight + W;
+		int W = 2;
+		return loc.x < -W || loc.y < -W || loc.x >= rc.getMapWidth() + W || loc.y >= rc.getMapWidth() + W;
 	}
 
 	static MapLocation smartLoc = null;

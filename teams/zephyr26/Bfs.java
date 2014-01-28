@@ -1,4 +1,4 @@
-package zephyr;
+package zephyr26;
 
 import battlecode.common.*;
 
@@ -18,7 +18,7 @@ public class Bfs {
 		NUM_PAGES = Math.min(40000 / PAGE_SIZE, MAX_PAGES);
 	}
 
-	private static final int pageMetadataBaseChannel = GameConstants.BROADCAST_MAX_CHANNELS - 500;
+	private static final int pageMetadataBaseChannel = GameConstants.BROADCAST_MAX_CHANNELS - 100;
 
 	public static final int PRIORITY_HIGH = 2;
 	public static final int PRIORITY_LOW = 1;

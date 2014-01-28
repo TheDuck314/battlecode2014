@@ -1,4 +1,4 @@
-package zephyr;
+package zephyr27_pastrcamp;
 
 import java.util.ArrayList;
 
@@ -19,7 +19,7 @@ public class BotSoldier extends Bot {
 
 	protected static void init(RobotController theRC) throws GameActionException {
 		Bot.init(theRC);
-		// Debug.init(theRC, "stance");
+		Debug.init(theRC, "test");
 		Nav.init(theRC);
 
 		spawnOrder = MessageBoard.SPAWN_COUNT.readInt();
@@ -49,7 +49,6 @@ public class BotSoldier extends Bot {
 	static boolean tryingSelfDestruct = false;
 	static boolean beVeryCautious = false;
 	static boolean inHealingState = false;
-	static boolean needToClearOutRallyBeforeDefending = false;
 
 	static int spawnOrder;
 
@@ -95,6 +94,11 @@ public class BotSoldier extends Bot {
 		MapLocation rallyLoc = MessageBoard.RALLY_LOC.readMapLocation();
 		BotHQ.RallyGoal rallyGoal = MessageBoard.RALLY_GOAL.readRallyGoal();
 
+		if (spawnOrder % 3 == 0) {
+			rallyLoc = MessageBoard.BEST_PASTR_LOCATIONS.readFromMapLocationList(0);
+			rallyGoal = BotHQ.RallyGoal.DEFEND;
+		}
+
 		// TODO: clean up this hack
 		if (Strategy.active == Strategy.SCATTER) {
 			if ((spawnOrder % 2) == 0) {
@@ -127,9 +131,9 @@ public class BotSoldier extends Bot {
 			}
 		}
 
-		if (tryBuildSomething()) {
-			return;
-		}
+//		if (tryBuildSomething()) {
+//			return;
+//		}
 
 		// Check if someone else has taken our job from us:
 		if (!isFirstTurn) {
@@ -252,7 +256,7 @@ public class BotSoldier extends Bot {
 	}
 
 	private static boolean tryBuildSomething() throws GameActionException {
-		if (numOtherNonConstructingAlliedSoldiersInRange(here, RobotType.SOLDIER.sensorRadiusSquared) <= 2 * visibleEnemies.length) return false;
+		if (1 + numOtherAlliedSoldiersInRange(here, RobotType.SOLDIER.sensorRadiusSquared) <= 2 * visibleEnemies.length) return false;
 
 		for (int i = 0; i < numPastrLocations; i++) {
 			MapLocation pastrLoc = bestPastrLocations[i];
@@ -367,22 +371,8 @@ public class BotSoldier extends Bot {
 	private static MicroStance chooseMicroStance(MapLocation rallyLoc, BotHQ.RallyGoal rallyGoal) {
 		switch (rallyGoal) {
 			case DEFEND:
-				needToClearOutRallyBeforeDefending = false;
-				Debug.indicate("stance", 0, "rallyGoal = DEFEND");
-				if (here.distanceSquaredTo(rallyLoc) > 64) {
-					Debug.indicate("stance", 1, "aggressive to punch through");
-					return MicroStance.AGGRESSIVE; // punch through to our pastr
-				}
-				// We are close to the rally point. But if there is still an enemy between us and the rally point, we have to be aggressive
-				MapLocation ahead = here.add(here.directionTo(rallyLoc), 2);
-				if (rc.senseNearbyGameObjects(Robot.class, ahead, RobotType.SOLDIER.attackRadiusMaxSquared, them).length > 0) {
-					Debug.indicate("stance", 1, "aggressive to clear out");
-					needToClearOutRallyBeforeDefending = true;
-					return MicroStance.AGGRESSIVE;
-				}
-				// Otherwise, we have made it to the pastr and can be defensive
-				Debug.indicate("stance", 1, "defensive");
-				return MicroStance.DEFENSIVE; // defend the pastr
+				if (here.distanceSquaredTo(rallyLoc) > 64) return MicroStance.AGGRESSIVE; // punch through to our pastr
+				else return MicroStance.DEFENSIVE; // defend the pastr
 
 			case DESTROY:
 				return MicroStance.AGGRESSIVE; // let nothing stand in our way
@@ -406,7 +396,6 @@ public class BotSoldier extends Bot {
 		switch (rallyGoal) {
 			case GATHER:
 			case DEFEND:
-				if (needToClearOutRallyBeforeDefending) return false;
 				if (here.distanceSquaredTo(rallyLoc) <= 36) {
 					MapLocation closestEnemy = Util.closestNonHQ(visibleEnemies, rc);
 					if (closestEnemy == null) return false;
@@ -605,7 +594,7 @@ public class BotSoldier extends Bot {
 		RobotInfo adjacentEnemySoldier = null;
 		for (RobotInfo info : attackableEnemies) {
 			if (info.type != RobotType.SOLDIER || info.isConstructing) continue;
-			if (info.location.isAdjacentTo(here) && info.health > RobotType.SOLDIER.attackPower) {
+			if (info.location.isAdjacentTo(here)) {
 				adjacentEnemySoldier = info;
 				break;
 			}
@@ -806,10 +795,10 @@ public class BotSoldier extends Bot {
 			}
 		}
 		if (bestDir != -1) {
-			// make sure we won't hit an ally or step into HQ attack range
-			MapLocation dest = here.add(dirs[bestDir]);
-			if (!Bot.isInTheirHQAttackRange(dest) && rc.senseNearbyGameObjects(Robot.class, dest, 2, us).length == 0) {
+			// make sure we won't hit an ally
+			if (rc.senseNearbyGameObjects(Robot.class, here.add(dirs[bestDir]), 2, us).length == 0) {
 				// check if we think we can survive the charge
+				MapLocation dest = here.add(dirs[bestDir]);
 				int numAttacksSuffered = 0;
 				for (RobotInfo enemy : visibleEnemies) {
 					if (enemy.type != RobotType.SOLDIER || enemy.isConstructing) continue;
@@ -875,8 +864,6 @@ public class BotSoldier extends Bot {
 			Direction move1 = path[0];
 			Direction move2 = path[1];
 			MapLocation dest = here.add(move1).add(move2);
-
-			if (Bot.isInTheirHQAttackRange(dest)) return false;
 
 			double totalActionDelay = twoMoveSelfDestructPathActionDelay[bestPath];
 			if (rc.senseTerrainTile(here) == TerrainTile.ROAD) totalActionDelay *= GameConstants.ROAD_ACTION_DELAY_FACTOR;
@@ -1064,16 +1051,15 @@ public class BotSoldier extends Bot {
 		}
 	}
 
-	private static int numOtherNonConstructingAlliedSoldiersInAttackRange(MapLocation loc) throws GameActionException {
-		return numOtherNonConstructingAlliedSoldiersInRange(loc, RobotType.SOLDIER.attackRadiusMaxSquared);
+	private static int numOtherAlliedSoldiersInAttackRange(MapLocation loc) throws GameActionException {
+		return numOtherAlliedSoldiersInRange(loc, RobotType.SOLDIER.attackRadiusMaxSquared);
 	}
 
-	private static int numOtherNonConstructingAlliedSoldiersInRange(MapLocation loc, int rangeSq) throws GameActionException {
+	private static int numOtherAlliedSoldiersInRange(MapLocation loc, int rangeSq) throws GameActionException {
 		int numAlliedSoldiers = 0;
 		Robot[] allies = rc.senseNearbyGameObjects(Robot.class, loc, rangeSq, us);
 		for (int i = allies.length; i-- > 0;) {
-			RobotInfo info = rc.senseRobotInfo(allies[i]);
-			if (info.type == RobotType.SOLDIER && !info.isConstructing) numAlliedSoldiers++;
+			if (rc.senseRobotInfo(allies[i]).type == RobotType.SOLDIER) numAlliedSoldiers++;
 		}
 		return numAlliedSoldiers;
 	}
@@ -1091,7 +1077,7 @@ public class BotSoldier extends Bot {
 		for (int i = enemies.length; i-- > 0;) {
 			RobotInfo info = enemies[i];
 			if (info.type != RobotType.SOLDIER || info.isConstructing) continue;
-			int numNearbyAllies = 1 + numOtherNonConstructingAlliedSoldiersInAttackRange(info.location);
+			int numNearbyAllies = 1 + numOtherAlliedSoldiersInAttackRange(info.location);
 			double turnsToKill = info.health / numNearbyAllies;
 			if (turnsToKill < bestTurnsToKill) {
 				bestTurnsToKill = turnsToKill;

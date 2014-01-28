@@ -1,4 +1,4 @@
-package zephyr;
+package zephyr27_pastrcamp;
 
 import battlecode.common.*;
 

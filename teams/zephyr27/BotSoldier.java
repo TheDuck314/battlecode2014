@@ -1,4 +1,4 @@
-package zephyr;
+package zephyr27;
 
 import java.util.ArrayList;
 
@@ -19,7 +19,7 @@ public class BotSoldier extends Bot {
 
 	protected static void init(RobotController theRC) throws GameActionException {
 		Bot.init(theRC);
-		// Debug.init(theRC, "stance");
+		Debug.init(theRC, "stance");
 		Nav.init(theRC);
 
 		spawnOrder = MessageBoard.SPAWN_COUNT.readInt();

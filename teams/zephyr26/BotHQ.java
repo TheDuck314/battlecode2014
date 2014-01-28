@@ -1,4 +1,4 @@
-package zephyr;
+package zephyr26;
 
 import battlecode.common.*;
 
@@ -73,9 +73,6 @@ public class BotHQ extends Bot {
 	static MapLocation[] bestPastrLocations = new MapLocation[MAX_PASTR_LOCATIONS];
 	static int numPastrLocations = 0;
 
-	// Keeps track of whether robots have built or are building the noise tower and pastr at each pastr location
-	static boolean[] pastrSiteBuildOrdersFulfilled;
-
 	public static final int MAX_SUPPRESSORS = 1;
 	static boolean singleSuppressorTriggered = false;
 	static int numSuppressorTargets = 0;
@@ -115,34 +112,12 @@ public class BotHQ extends Bot {
 				|| Strategy.active == Strategy.SCATTER_SUPPRESSOR) {
 			MapLocation repel = null;
 			boolean safe = true;
-			computePastrScores(repel, safe, true);
+			computePastrScores(repel, safe);
 			computeOneGoodPastrLocation();
 			// if (Strategy.active == Strategy.SCATTER || Strategy.active == Strategy.SCATTER_SUPPRESSOR) {
 			// computeSecondGoodPastrLocation();
 			// }
 			broadcastBestPastrLocations();
-		}
-		if (Strategy.active == Strategy.RUSH) {
-			// Send out a preliminary central rally point
-			rallyLoc = centralRallyPoint;
-			rallyGoal = RallyGoal.GATHER;
-			MessageBoard.RALLY_LOC.writeMapLocation(rallyLoc);
-			MessageBoard.RALLY_GOAL.writeRallyGoal(rallyGoal);
-			// Compute the pastr location we would eventually go to.
-			rushPastrRepel = null;
-			rushPastrSafe = true;
-			computePastrScores(rushPastrRepel, rushPastrSafe, false);
-			computeOneGoodPastrLocation();
-			// If the pastr location is near the centerline, rally there instead. This may save us from having to clear the enemy out
-			// of the pastr location in the future, because we will seize control of the location first
-			double distOurHQ = Math.sqrt(ourHQ.distanceSquaredTo(bestPastrLocations[0]));
-			double distTheirHQ = Math.sqrt(theirHQ.distanceSquaredTo(bestPastrLocations[0]));
-			if (Math.abs(distOurHQ - distTheirHQ) <= 5) {
-				centralRallyPoint = bestPastrLocations[0];
-				// centralRallyPoint = centralRallyPoint.add(centralRallyPoint.directionTo(theirHQ), 3);
-				rallyLoc = centralRallyPoint;
-				MessageBoard.RALLY_LOC.writeMapLocation(rallyLoc);
-			}
 		}
 	}
 
@@ -188,24 +163,11 @@ public class BotHQ extends Bot {
 		}
 		maxEnemySoldiers = maxEnemySpawns - numEnemyPastrs;
 
-		int[] towerBuilderIds = new int[numPastrLocations];
-		int[] pastrBuilderIds = new int[numPastrLocations];
-		for (int i = 0; i < numPastrLocations; i++) {
-			towerBuilderIds[i] = MessageBoard.TOWER_BUILDER_ROBOT_IDS.readCurrentAssignedID(i);
-			pastrBuilderIds[i] = MessageBoard.PASTR_BUILDER_ROBOT_IDS.readCurrentAssignedID(i);
-		}
-		int[] suppressorBuilderIds = new int[numSuppressorTargets];
-		for (int i = 0; i < numSuppressorTargets; i++) {
-			suppressorBuilderIds[i] = MessageBoard.SUPPRESSOR_BUILDER_ROBOT_IDS.readCurrentAssignedID(i);
-		}
-
 		numAlliedSoldiers = 0;
 		Robot[] allAlliedRobots = rc.senseNearbyGameObjects(Robot.class, 999999, us);
 		allAllies = new RobotInfo[allAlliedRobots.length];
 		boolean[] towerBuildersAlive = new boolean[numPastrLocations];
 		boolean[] pastrBuildersAlive = new boolean[numPastrLocations];
-		boolean[] towerOrdersFulfilled = new boolean[numPastrLocations];
-		boolean[] pastrOrdersFulfilled = new boolean[numPastrLocations];
 		boolean[] suppressorBuildersAlive = new boolean[numSuppressorTargets];
 		boolean[] suppressorJobsFinished = new boolean[numSuppressorTargets];
 		for (int i = allAlliedRobots.length; i-- > 0;) {
@@ -215,17 +177,11 @@ public class BotHQ extends Bot {
 			if (info.type == RobotType.SOLDIER) numAlliedSoldiers++;
 			int id = ally.getID();
 			for (int j = 0; j < numPastrLocations; j++) {
-				if (id == towerBuilderIds[j]) {
-					towerBuildersAlive[j] = true;
-					if (info.location.isAdjacentTo(bestPastrLocations[j])) towerOrdersFulfilled[j] = true;
-				}
-				if (id == pastrBuilderIds[j]) {
-					pastrBuildersAlive[j] = true;
-					if (info.location.equals(bestPastrLocations[j])) pastrOrdersFulfilled[j] = true;
-				}
+				if (id == MessageBoard.TOWER_BUILDER_ROBOT_IDS.readCurrentAssignedID(j)) towerBuildersAlive[j] = true;
+				if (id == MessageBoard.PASTR_BUILDER_ROBOT_IDS.readCurrentAssignedID(j)) pastrBuildersAlive[j] = true;
 			}
 			for (int j = 0; j < numSuppressorTargets; j++) {
-				if (id == suppressorBuilderIds[j]) {
+				if (id == MessageBoard.SUPPRESSOR_BUILDER_ROBOT_IDS.readCurrentAssignedID(j)) {
 					suppressorBuildersAlive[j] = true;
 					// check if this robot has fulfilled the suppressor order (so that no one else should try to steal the job):
 					if (info.type == RobotType.NOISETOWER || info.isConstructing) {
@@ -233,10 +189,6 @@ public class BotHQ extends Bot {
 					}
 				}
 			}
-		}
-		pastrSiteBuildOrdersFulfilled = new boolean[numPastrLocations];
-		for (int i = 0; i < numPastrLocations; i++) {
-			pastrSiteBuildOrdersFulfilled[i] = towerOrdersFulfilled[i] && pastrOrdersFulfilled[i];
 		}
 
 		for (int i = 0; i < numPastrLocations; i++) {
@@ -283,7 +235,6 @@ public class BotHQ extends Bot {
 			if (proxyPastrBuildTriggered) {
 				rallyLoc = bestPastrLocations[0];
 				rallyGoal = RallyGoal.DEFEND;
-				if (!pastrSiteBuildOrdersFulfilled[0]) MessageBoard.COLLAPSE_TO_PASTR_SIGNAL.writeInt(Clock.getRoundNum());
 			} else {
 				rallyLoc = centralRallyPoint;
 				rallyGoal = RallyGoal.GATHER;
@@ -304,7 +255,7 @@ public class BotHQ extends Bot {
 			proxyPastrBuildTriggered = true;
 			MapLocation repel = numEnemyPastrs > 0 ? theirPastrs[0] : null;
 			boolean safe = false;
-			computePastrScores(repel, safe, false);
+			computePastrScores(repel, safe);
 			computeOneGoodPastrLocation();
 			broadcastBestPastrLocations();
 		}
@@ -370,7 +321,6 @@ public class BotHQ extends Bot {
 						bestDistSq = distSq;
 						rallyLoc = pastrLoc;
 						rallyGoal = RallyGoal.DEFEND;
-						if (!pastrSiteBuildOrdersFulfilled[i]) MessageBoard.COLLAPSE_TO_PASTR_SIGNAL.writeInt(Clock.getRoundNum());
 					}
 				}
 			}
@@ -393,7 +343,6 @@ public class BotHQ extends Bot {
 			} else {
 				rallyLoc = bestPastrLocations[0];
 				rallyGoal = RallyGoal.DEFEND;
-				if (!pastrSiteBuildOrdersFulfilled[0]) MessageBoard.COLLAPSE_TO_PASTR_SIGNAL.writeInt(Clock.getRoundNum());
 			}
 		}
 		MessageBoard.RALLY_LOC.writeMapLocation(rallyLoc);
@@ -427,7 +376,7 @@ public class BotHQ extends Bot {
 		}
 
 		if (rushBuildStartRound > 0 && Clock.getRoundNum() >= rushBuildStartRound && !rushBuildOrderIssued) {
-			computePastrScores(rushPastrRepel, rushPastrSafe, false);
+			computePastrScores(rushPastrRepel, rushPastrSafe);
 			computeOneGoodPastrLocation();
 			broadcastBestPastrLocations();
 			rushBuildOrderIssued = true;
@@ -496,12 +445,11 @@ public class BotHQ extends Bot {
 		return bestTarget;
 	}
 
-	private static void computePastrScores(MapLocation repel, boolean safe, boolean avoidMapEdges) {
-		Debug.timerStart();
+	private static void computePastrScores(MapLocation repel, boolean safe) {
 		double mapSize = Math.hypot(mapWidth, mapHeight);
 		MapLocation mapCenter = new MapLocation(mapWidth / 2, mapHeight / 2);
 
-		int spacing = mapWidth * mapHeight < 2500 ? 3 : 5;
+		int spacing = mapWidth * mapHeight <= 2500 ? 3 : 5;
 
 		double[][] pastrScores = new double[mapWidth][mapHeight];
 		for (int y = 2; y < mapHeight - 2; y += spacing) {
@@ -530,16 +478,8 @@ public class BotHQ extends Bot {
 								score *= 0.5;
 							}
 							for (int i = 8; i-- > 0;) {
-								// Bad idea to have pastrs next to walls. Enemies can shoot over them in a way that's hard to defend against.
-								// Also with pastrs in narrow passages our noise towers tend to block the passage and the pastr doesn't get build.
+								// Bad idea to have pastrs next to walls. Enemies can shoot over them in a way that's hard to defend against
 								if (rc.senseTerrainTile(loc.add(Direction.values()[i])) == TerrainTile.VOID) score *= 0.95;
-							}
-							if (avoidMapEdges) {
-								int W = 10;
-								if (x < W) score *= (W + (double) x) / (2 * W);
-								if (y < W) score *= (W + (double) y) / (2 * W);
-								if (mapWidth - x < W) score *= (W + mapWidth - (double) x) / (2 * W);
-								if (mapWidth - y < W) score *= (W + mapWidth - (double) y) / (2 * W);
 							}
 							pastrScores[x][y] = score;
 						} else {
@@ -557,7 +497,6 @@ public class BotHQ extends Bot {
 		}
 
 		computedPastrScores = pastrScores;
-		Debug.timerEnd("pastr scores on " + mapWidth + " x " + mapHeight + " map w/ spacing " + spacing);
 	}
 
 	private static void computeOneGoodPastrLocation() {
