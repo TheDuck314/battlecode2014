@@ -171,7 +171,7 @@ public class BotNoiseTower extends Bot {
 	}
 
 	private static boolean tooFarOffMap(MapLocation loc) {
-		int W = 3;
+		int W = 4;
 		return loc.x < -W || loc.y < -W || loc.x >= mapWidth + W || loc.y >= mapHeight + W;
 	}
 

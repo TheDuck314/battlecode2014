@@ -504,7 +504,6 @@ public class BotHQ extends Bot {
 	}
 
 	private static void computePastrScores(MapLocation repel, boolean safe, boolean avoidMapEdges) {
-		Debug.timerStart();
 		double mapSize = Math.hypot(mapWidth, mapHeight);
 		MapLocation mapCenter = new MapLocation(mapWidth / 2, mapHeight / 2);
 
@@ -564,7 +563,6 @@ public class BotHQ extends Bot {
 		}
 
 		computedPastrScores = pastrScores;
-		Debug.timerEnd("pastr scores on " + mapWidth + " x " + mapHeight + " map w/ spacing " + spacing);
 	}
 
 	private static void computeOneGoodPastrLocation() {
