@@ -7,7 +7,9 @@ public enum Strategy {
 	PROXY, // Proxy 2 Gate's strategy from sprint: rally to center, once enemy builds pastr stand around it and build your own noise tower + pastr
 	PROXY_ATTACK, // Like PROXY but we try to attack and destroy the enemy's pastr if we have the numbers for it
 	SCATTER, // Try to build several noise tower + pastrs around the map, all while harrassing the enemy's pastr(s)
+	SCATTER_HALF, // like SCATTER_SUPPRESSOR but half the soldiers stay to guard the pastr
 	SCATTER_SUPPRESSOR, // like SCATTER but builds a suppressor tower too
+	SCATTER_SUPPRESSOR_HALF, // like SCATTER_SUPPRESSOR but half the soldiers stay to guard the pastr
 	RUSH, // rally to the center and then attack pastrs as they appear
 	UNDECIDED;
 

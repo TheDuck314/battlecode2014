@@ -19,7 +19,7 @@ public class BotSoldier extends Bot {
 
 	protected static void init(RobotController theRC) throws GameActionException {
 		Bot.init(theRC);
-		// Debug.init(theRC, "stance");
+		Debug.init(theRC, "selfdestruct");
 		Nav.init(theRC);
 
 		spawnOrder = MessageBoard.SPAWN_COUNT.readInt();
@@ -96,7 +96,7 @@ public class BotSoldier extends Bot {
 		BotHQ.RallyGoal rallyGoal = MessageBoard.RALLY_GOAL.readRallyGoal();
 
 		// TODO: clean up this hack
-		if (Strategy.active == Strategy.SCATTER) {
+		if (Strategy.active == Strategy.SCATTER_HALF || Strategy.active == Strategy.SCATTER_SUPPRESSOR_HALF) {
 			if ((spawnOrder % 2) == 0) {
 				if (rallyGoal == BotHQ.RallyGoal.HARRASS) {
 					if (numPastrLocations == 1) {
@@ -188,7 +188,8 @@ public class BotSoldier extends Bot {
 		}
 
 		if (Strategy.active == Strategy.ONE_PASTR || Strategy.active == Strategy.ONE_PASTR_SUPPRESSOR || Strategy.active == Strategy.SCATTER
-				|| Strategy.active == Strategy.SCATTER_SUPPRESSOR) {
+				|| Strategy.active == Strategy.SCATTER_HALF || Strategy.active == Strategy.SCATTER_SUPPRESSOR
+				|| Strategy.active == Strategy.SCATTER_SUPPRESSOR_HALF) {
 			tryClaimBuildAssignment();
 		}
 		return true;
@@ -252,7 +253,10 @@ public class BotSoldier extends Bot {
 	}
 
 	private static boolean tryBuildSomething() throws GameActionException {
-		if (numOtherNonConstructingAlliedSoldiersInRange(here, RobotType.SOLDIER.sensorRadiusSquared) <= 2 * visibleEnemies.length) return false;
+		// only build if the area is secure
+		int numDefenders = numOtherNonConstructingAlliedSoldiersInRange(here, RobotType.SOLDIER.sensorRadiusSquared);
+		int numAttackers = visibleEnemies.length;
+		if (numAttackers > 0 && numDefenders <= numAttackers + 3) return false;
 
 		for (int i = 0; i < numPastrLocations; i++) {
 			MapLocation pastrLoc = bestPastrLocations[i];
@@ -300,7 +304,8 @@ public class BotSoldier extends Bot {
 			for (int i = 0; i < numSuppressors; i++) {
 				if (!MessageBoard.SUPPRESSOR_JOBS_FINISHED.readFromBooleanList(i)) {
 					MapLocation suppressorTarget = MessageBoard.SUPPRESSOR_TARGET_LOCATIONS.readFromMapLocationList(i);
-					if (here.distanceSquaredTo(suppressorTarget) <= RobotType.NOISETOWER.attackRadiusMaxSquared) {
+					int distSq = here.distanceSquaredTo(suppressorTarget);
+					if (distSq <= RobotType.NOISETOWER.attackRadiusMaxSquared && distSq >= 10) {
 						MessageBoard.SUPPRESSOR_BUILDER_ROBOT_IDS.claimAssignment(i);
 						MessageBoard.SUPPRESSOR_JOBS_FINISHED.writeToBooleanList(i, true);
 						rc.construct(RobotType.NOISETOWER);
@@ -431,15 +436,6 @@ public class BotSoldier extends Bot {
 			default: // shouldn't happen
 				return false;
 		}
-	}
-
-	private static int numEnemySoldiersWhoCanAttackUsNextTurn() {
-		int ret = 0;
-		for (RobotInfo info : attackableEnemies) {
-			if (info.type != RobotType.SOLDIER || info.isConstructing) continue;
-			if (info.actionDelay < 2) ret++;
-		}
-		return ret;
 	}
 
 	// obligatory micro is attacks or movements that we have to do because either we or a nearby ally is in combat
@@ -630,7 +626,15 @@ public class BotSoldier extends Bot {
 		if (away.isDiagonal()) {
 			fleeDirs = new Direction[] { away, away.rotateLeft(), away.rotateRight(), away.rotateLeft().rotateLeft(), away.rotateRight().rotateRight() };
 		} else {
-			fleeDirs = new Direction[] { away, away.rotateLeft(), away.rotateRight() };
+			Direction toBomber = here.directionTo(adjacentEnemySoldier.location);
+			if (!rc.canMove(toBomber.rotateLeft().rotateLeft())) { // cheap approximate test for whether there is an ally to our left, looking toward enemy
+				fleeDirs = new Direction[] { away.rotateLeft(), away, away.rotateRight() };
+			} else if (!rc.canMove(toBomber.rotateRight().rotateRight())) { // cheap approximate test for whether there is an ally to our right, looking toward
+																			// enemy
+				fleeDirs = new Direction[] { away.rotateRight(), away, away.rotateLeft() };
+			} else {
+				fleeDirs = new Direction[] { away, away.rotateLeft(), away.rotateRight() };
+			}
 		}
 		for (Direction fleeDir : fleeDirs) {
 			if (!rc.canMove(fleeDir)) continue;
@@ -744,6 +748,17 @@ public class BotSoldier extends Bot {
          {-1, 2,  -1, -1, -1, 7,  -1 },
          {-1, 12, 4,  3,  5,  13, -1 },
          {-1, -1, -1, -1, -1, -1, -1 }};
+    // @formatter:on
+
+	// @formatter:off
+	// selfDestructChargeWillWork[numTurns][actionDelayFloor] tells whether we can successfully charge an 
+	// enemy with floor(actionDelay) = actionDelayFloor if our charge will take numTurns turns
+	private static boolean[][] selfDestructChargeWillWork = 
+		{{ true,  true,  true,  true,  true,  true,  true},
+		 {false, false,  true,  true,  true,  true,  true},
+		 { true,  true, false,  true,  true,  true,  true},
+		 {false, false,  true, false,  true,  true,  true},
+		 { true,  true, false,  true, false,  true,  true}};	
 	// @formatter:on
 
 	// @formatter:off
@@ -790,11 +805,13 @@ public class BotSoldier extends Bot {
 		double[] moveScores = new double[8];
 		for (RobotInfo info : attackableEnemies) {
 			if (info.type != RobotType.SOLDIER || info.isConstructing) continue;
+			// if (info.actionDelay >= 2) { // otherwise they can flee
 			double score = Math.min(maxDamage, info.health);
 			int[] moves = selfDestructNotes[3 + info.location.x - here.x][3 + info.location.y - here.y];
 			for (int dir : moves) {
 				moveScores[dir] += score;
 			}
+			// }
 		}
 		double bestScore = 1.5 * health;
 		int bestDir = -1;
@@ -834,12 +851,11 @@ public class BotSoldier extends Bot {
 	}
 
 	private static boolean tryMoveForTwoMoveSelfDestruct() throws GameActionException {
-		// if (health < 50) return false;
-
-		Debug.indicate("selfdestruct", 0, "2move called");
-
 		double maxDamage = GameConstants.SELF_DESTRUCT_BASE_DAMAGE + GameConstants.SELF_DESTRUCT_DAMAGE_FACTOR * health;
 		int numPaths = twoMoveSelfDestructPaths.length;
+		boolean onRoad = rc.senseTerrainTile(here) == TerrainTile.ROAD;
+		int chargeTurns = onRoad ? 2 : 3; // how many turns our charge will take. This assumes we have small actiondelay for diagonal charges
+		boolean[] actionDelayIsVulnerable = selfDestructChargeWillWork[chargeTurns]; // which enemy actiondelays are vulnerable to a charge
 		double[] pathScores = new double[numPaths];
 		for (RobotInfo info : visibleEnemies) {
 			int enemyDxP3 = info.location.x - here.x + 3;
@@ -848,10 +864,12 @@ public class BotSoldier extends Bot {
 				int blockedPath = blockedTwoMoveSelfDestructPath[enemyDxP3][enemyDyP3];
 				if (blockedPath != -1) pathScores[blockedPath] = -999999;
 				if (info.type != RobotType.SOLDIER || info.isConstructing) continue;
-				double score = Math.min(maxDamage, info.health);
-				int[] paths = twoMoveSelfDestructTargetPaths[enemyDxP3][enemyDyP3];
-				for (int p : paths) {
-					pathScores[p] += score;
+				if (actionDelayIsVulnerable[(int) info.actionDelay]) { // check if this enemy will be able to flee
+					double score = Math.min(maxDamage, info.health);
+					int[] paths = twoMoveSelfDestructTargetPaths[enemyDxP3][enemyDyP3];
+					for (int p : paths) {
+						pathScores[p] += score;
+					}
 				}
 			}
 		}
@@ -903,24 +921,32 @@ public class BotSoldier extends Bot {
 				}
 			}
 			double damageTaken = numAttacksSuffered * RobotType.SOLDIER.attackPower;
-			// Debug.indicate("selfdestruct", 1,
-			// String.format("considering self-destruct: numVulnerableTurrns = %d, numAttacksSuffered = %d,", numVulnerableTurns, numAttacksSuffered));
-			// Debug.indicate("selfdestruct", 2, String.format("health = %f, damageTaken = %f", health, damageTaken));
+			Debug.indicate("selfdestruct", 0,
+					String.format("considering self-destruct: numVulnerableTurrns = %d, numAttacksSuffered = %d,", numVulnerableTurns, numAttacksSuffered));
+			Debug.indicate("selfdestruct", 1, String.format("health = %f, damageTaken = %f", health, damageTaken));
 			if (health > damageTaken) {
 				double actualMaxDamage = GameConstants.SELF_DESTRUCT_BASE_DAMAGE + GameConstants.SELF_DESTRUCT_DAMAGE_FACTOR * (health - damageTaken);
 				double actualTotalDamageDealt = 0;
+				int numKills = 0;
 				for (int i = 0; i < numTargets; i++) {
-					actualTotalDamageDealt += Math.min(actualMaxDamage, targetHealths[i]);
+					double targetHealth = targetHealths[i];
+					if (targetHealth <= actualMaxDamage) {
+						actualTotalDamageDealt += targetHealth;
+						numKills++;
+					} else {
+						actualTotalDamageDealt += actualMaxDamage;
+					}
 				}
 				if (actualTotalDamageDealt >= 1.3 * health) {
-					Debug.indicate("selfdestruct", 2, String.format("actualTotalDamageDealt = %f: going for it", actualTotalDamageDealt));
+					Debug.indicate("selfdestruct", 2,
+							String.format("actualTotalDamageDealt = %f, numKills = %d: going for it", actualTotalDamageDealt, numKills));
 					rc.move(twoMoveSelfDestructPaths[bestPath][0]);
 					// Tell others not to go for a self-destruct right now
 					MessageBoard.SELF_DESTRUCT_LOCKOUT_ID.writeInt(rc.getRobot().getID());
 					MessageBoard.SELF_DESTRUCT_LOCKOUT_ROUND.writeInt(Clock.getRoundNum() + 2);
 					return true;
 				} else {
-					Debug.indicate("selfdestruct", 2, String.format("actualTotalDamageDealt = %f: too little", actualTotalDamageDealt));
+					Debug.indicate("selfdestruct", 2, String.format("actualTotalDamageDealt = %f, numKills = %d: too little", actualTotalDamageDealt, numKills));
 				}
 			}
 		}
@@ -1332,7 +1358,7 @@ public class BotSoldier extends Bot {
 	private static void attackAndRecord(RobotInfo enemyInfo) throws GameActionException {
 		if (enemyInfo == null) return; // should never happen, but just to be sure
 		rc.attackSquare(enemyInfo.location);
-		if (enemyInfo.health <= RobotType.SOLDIER.attackPower) MessageBoard.ROUND_KILL_COUNT.incrementInt();
+		// if (enemyInfo.health <= RobotType.SOLDIER.attackPower) MessageBoard.ROUND_KILL_COUNT.incrementInt();
 	}
 
 }

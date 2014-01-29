@@ -5,7 +5,7 @@ import battlecode.common.*;
 public enum MessageBoard {
 	RALLY_LOC(GameConstants.BROADCAST_MAX_CHANNELS - 1),
 	RALLY_GOAL(GameConstants.BROADCAST_MAX_CHANNELS - 2),
-	ROUND_KILL_COUNT(GameConstants.BROADCAST_MAX_CHANNELS - 3),
+//	ROUND_KILL_COUNT(GameConstants.BROADCAST_MAX_CHANNELS - 3),
 	SPAWN_COUNT(GameConstants.BROADCAST_MAX_CHANNELS - 4),
 	STRATEGY(GameConstants.BROADCAST_MAX_CHANNELS - 5),
 	PASTR_DISTRESS_SIGNAL(GameConstants.BROADCAST_MAX_CHANNELS - 6),
@@ -25,7 +25,7 @@ public enum MessageBoard {
 	public static void setDefaultChannelValues() throws GameActionException {
 		RALLY_LOC.writeMapLocation(null);
 		RALLY_GOAL.writeRallyGoal(BotHQ.RallyGoal.GATHER);
-		ROUND_KILL_COUNT.writeInt(0);
+		// ROUND_KILL_COUNT.writeInt(0);
 		SPAWN_COUNT.writeInt(0);
 		STRATEGY.writeStrategy(Strategy.UNDECIDED);
 		PASTR_DISTRESS_SIGNAL.writeInt(0);

@@ -103,10 +103,13 @@ public class BotNoiseTower extends Bot {
 					rc.attackSquare(closestEnemyPastr);
 					return;
 				} else {
-					MapLocation closer = closestEnemyPastr.add(closestEnemyPastr.directionTo(here));
-					if (rc.canAttackSquare(closer)) {
-						rc.attackSquare(closer);
-						return;
+					MapLocation closer = closestEnemyPastr;
+					for (int i = 0; i < 2; i++) {
+						closer = closer.add(closer.directionTo(here));
+						if (rc.canAttackSquare(closer)) {
+							rc.attackSquare(closer);
+							return;
+						}
 					}
 				}
 			} else {
@@ -126,13 +129,23 @@ public class BotNoiseTower extends Bot {
 		// herdTowardPastrSmart();
 	}
 
-	private static MapLocation findNearestAlliedPastr() {
-		MapLocation[] pastrs = rc.sensePastrLocations(us);
-		return Util.closest(pastrs, here);
+	private static MapLocation findNearestAlliedPastr() throws GameActionException {
+		int numPastrLocations = MessageBoard.NUM_PASTR_LOCATIONS.readInt();
+		MapLocation closest = null;
+		int bestDistSq = 999999;
+		for (int i = 0; i < numPastrLocations; i++) {
+			MapLocation pastrLoc = MessageBoard.BEST_PASTR_LOCATIONS.readFromMapLocationList(i);
+			int distSq = here.distanceSquaredTo(pastrLoc);
+			if (distSq < bestDistSq) {
+				bestDistSq = distSq;
+				closest = pastrLoc;
+			}
+		}
+		return closest;
 	}
 
-	static final int maxOrthogonalRadius = (int) Math.sqrt(RobotType.NOISETOWER.attackRadiusMaxSquared);
-	static final int maxDiagonalRadius = (int) Math.sqrt(RobotType.NOISETOWER.attackRadiusMaxSquared / 2);
+	static final int maxOrthogonalRadius = 3 + (int) Math.sqrt(RobotType.NOISETOWER.attackRadiusMaxSquared);
+	static final int maxDiagonalRadius = 3 + (int) Math.sqrt(RobotType.NOISETOWER.attackRadiusMaxSquared / 2);
 	static Direction attackDir = Direction.NORTH;
 	static int radius = attackDir.isDiagonal() ? maxDiagonalRadius : maxOrthogonalRadius;
 	// static final int[] nextDumbHerdDir = new int[] { 2, 3, 4, 5, 6, 7, 1, 0 };

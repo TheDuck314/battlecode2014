@@ -30,13 +30,13 @@ public class BotHQ extends Bot {
 	}
 
 	// Strategic info
-	static int virtualSpawnCountdown = 0;
-	static int maxEnemySpawns;
+	// static int virtualSpawnCountdown = 0;
+	// static int maxEnemySpawns;
 	static int numEnemyPastrs;
-	static int maxEnemySoldiers; // An upper bound on the # of enemy soldiers
+	// static int maxEnemySoldiers; // An upper bound on the # of enemy soldiers
 	static int numAlliedPastrs;
-	static int numAlliedSoldiers;
-	static int numAlliedNoiseTowers;
+	// static int numAlliedSoldiers;
+	// static int numAlliedNoiseTowers;
 	static double ourMilk;
 	static double theirMilk;
 
@@ -112,12 +112,14 @@ public class BotHQ extends Bot {
 		MessageBoard.STRATEGY.writeStrategy(Strategy.active);
 
 		if (Strategy.active == Strategy.ONE_PASTR || Strategy.active == Strategy.ONE_PASTR_SUPPRESSOR || Strategy.active == Strategy.SCATTER
-				|| Strategy.active == Strategy.SCATTER_SUPPRESSOR) {
+				|| Strategy.active == Strategy.SCATTER_HALF || Strategy.active == Strategy.SCATTER_SUPPRESSOR
+				|| Strategy.active == Strategy.SCATTER_SUPPRESSOR_HALF) {
 			MapLocation repel = null;
 			boolean safe = true;
 			computePastrScores(repel, safe, true);
 			computeOneGoodPastrLocation();
-			// if (Strategy.active == Strategy.SCATTER || Strategy.active == Strategy.SCATTER_SUPPRESSOR) {
+			// if (Strategy.active == Strategy.SCATTER || Strategy.active == Strategy.SCATTER_HALF || Strategy.active == Strategy.SCATTER_SUPPRESSOR ||
+			// Strategy.active == Strategy.SCATTER_SUPPRESSOR_HALF) {
 			// computeSecondGoodPastrLocation();
 			// }
 			broadcastBestPastrLocations();
@@ -165,7 +167,7 @@ public class BotHQ extends Bot {
 		if (mapSize < 60) {
 			return Strategy.RUSH;
 		} else {
-			return Strategy.SCATTER_SUPPRESSOR;
+			return Strategy.SCATTER_SUPPRESSOR_HALF;
 		}
 	}
 
@@ -175,18 +177,18 @@ public class BotHQ extends Bot {
 		ourPastrs = rc.sensePastrLocations(us);
 		numAlliedPastrs = ourPastrs.length;
 
-		int numKillsLastTurn = MessageBoard.ROUND_KILL_COUNT.readInt();
-		MessageBoard.ROUND_KILL_COUNT.writeInt(0);
-		maxEnemySpawns -= numKillsLastTurn;
+		// int numKillsLastTurn = MessageBoard.ROUND_KILL_COUNT.readInt();
+		// MessageBoard.ROUND_KILL_COUNT.writeInt(0);
+		// maxEnemySpawns -= numKillsLastTurn;
 
-		virtualSpawnCountdown--;
-		if (virtualSpawnCountdown <= 0) {
-			maxEnemySpawns++;
-			int maxEnemyPopCount = maxEnemySpawns + numEnemyPastrs;
-			virtualSpawnCountdown = (int) Math.round(GameConstants.HQ_SPAWN_DELAY_CONSTANT_1
-					+ Math.pow(maxEnemyPopCount - 1, GameConstants.HQ_SPAWN_DELAY_CONSTANT_2));
-		}
-		maxEnemySoldiers = maxEnemySpawns - numEnemyPastrs;
+		// virtualSpawnCountdown--;
+		// if (virtualSpawnCountdown <= 0) {
+		// maxEnemySpawns++;
+		// int maxEnemyPopCount = maxEnemySpawns + numEnemyPastrs;
+		// virtualSpawnCountdown = (int) Math.round(GameConstants.HQ_SPAWN_DELAY_CONSTANT_1
+		// + Math.pow(maxEnemyPopCount - 1, GameConstants.HQ_SPAWN_DELAY_CONSTANT_2));
+		// }
+		// maxEnemySoldiers = maxEnemySpawns - numEnemyPastrs;
 
 		int[] towerBuilderIds = new int[numPastrLocations];
 		int[] pastrBuilderIds = new int[numPastrLocations];
@@ -199,7 +201,7 @@ public class BotHQ extends Bot {
 			suppressorBuilderIds[i] = MessageBoard.SUPPRESSOR_BUILDER_ROBOT_IDS.readCurrentAssignedID(i);
 		}
 
-		numAlliedSoldiers = 0;
+		// numAlliedSoldiers = 0;
 		Robot[] allAlliedRobots = rc.senseNearbyGameObjects(Robot.class, 999999, us);
 		allAllies = new RobotInfo[allAlliedRobots.length];
 		boolean[] towerBuildersAlive = new boolean[numPastrLocations];
@@ -212,7 +214,7 @@ public class BotHQ extends Bot {
 			Robot ally = allAlliedRobots[i];
 			RobotInfo info = rc.senseRobotInfo(ally);
 			allAllies[i] = info;
-			if (info.type == RobotType.SOLDIER) numAlliedSoldiers++;
+			// if (info.type == RobotType.SOLDIER) numAlliedSoldiers++;
 			int id = ally.getID();
 			for (int j = 0; j < numPastrLocations; j++) {
 				if (id == towerBuilderIds[j]) {
@@ -259,7 +261,9 @@ public class BotHQ extends Bot {
 			case ONE_PASTR:
 			case ONE_PASTR_SUPPRESSOR:
 			case SCATTER:
+			case SCATTER_HALF:
 			case SCATTER_SUPPRESSOR:
+			case SCATTER_SUPPRESSOR_HALF:
 				directStrategyOnePastr();
 				break;
 
@@ -311,7 +315,8 @@ public class BotHQ extends Bot {
 	}
 
 	private static void directStrategyOnePastr() throws GameActionException {
-		if (Strategy.active == Strategy.ONE_PASTR_SUPPRESSOR || Strategy.active == Strategy.SCATTER_SUPPRESSOR) {
+		if (Strategy.active == Strategy.ONE_PASTR_SUPPRESSOR || Strategy.active == Strategy.SCATTER_SUPPRESSOR
+				|| Strategy.active == Strategy.SCATTER_SUPPRESSOR_HALF) {
 			directSingleSuppressor();
 		}
 
@@ -353,7 +358,8 @@ public class BotHQ extends Bot {
 
 		if (rallyLoc == null) { // if attack mode isn't triggered, or if there is no good target to attack
 			rallyLoc = null;
-			if (Strategy.active == Strategy.SCATTER || Strategy.active == Strategy.SCATTER_SUPPRESSOR) {
+			if (Strategy.active == Strategy.SCATTER || Strategy.active == Strategy.SCATTER_HALF || Strategy.active == Strategy.SCATTER_SUPPRESSOR
+					|| Strategy.active == Strategy.SCATTER_SUPPRESSOR_HALF) {
 				// scatter strategies harrass the enemy pastrs, if any
 				rallyLoc = chooseEnemyPastrAttackTarget();
 				rallyGoal = RallyGoal.HARRASS;
@@ -380,8 +386,9 @@ public class BotHQ extends Bot {
 	}
 
 	private static void directStrategyRush() throws GameActionException {
-		if (numEnemyPastrs > 0 && theyHavePastrOutsideHQ()) {
+		if (numEnemyPastrs > 0 && theyHavePastrOutsideHQ() && (ourMilk < theirMilk + 5e6 || numAlliedPastrs == 0)) {
 			// If they build a pastr outside their HQ, attack it!
+			// But: if we have much more milk than they do, defend instead for the safe win
 			rallyLoc = chooseEnemyPastrAttackTarget();
 			rallyGoal = RallyGoal.DESTROY;
 		} else {
