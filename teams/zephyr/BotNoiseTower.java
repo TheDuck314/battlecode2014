@@ -87,10 +87,9 @@ public class BotNoiseTower extends Bot {
 	private static void turn() throws GameActionException {
 		if (!amSuppressor) {
 			if (rc.getHealth() < lastHealth) {
-				collapseSignalEndRound = Clock.getRoundNum() + 30;
+				MessageBoard.COLLAPSE_TO_PASTR_SIGNAL.writeInt(Clock.getRoundNum() + 30);
 			}
 			lastHealth = rc.getHealth();
-			if (Clock.getRoundNum() < collapseSignalEndRound) MessageBoard.COLLAPSE_TO_PASTR_SIGNAL.writeInt(Clock.getRoundNum());
 		}
 
 		if (!rc.isActive()) return;

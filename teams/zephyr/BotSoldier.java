@@ -18,7 +18,7 @@ public class BotSoldier extends Bot {
 
 	protected static void init(RobotController theRC) throws GameActionException {
 		Bot.init(theRC);
-		Debug.init(theRC, "bytecodes");
+//		Debug.init(theRC, "bytecodes");
 		Nav.init(theRC);
 
 		spawnOrder = MessageBoard.SPAWN_COUNT.readInt();
@@ -46,7 +46,6 @@ public class BotSoldier extends Bot {
 	static int numVisibleNonConstructingEnemySoldiers;
 	static int[] cachedNumEnemiesAttackingMoveDirs; // computed in doObligatoryMicro
 	static boolean tryingSelfDestruct = false;
-	static boolean beVeryCautious = false;
 	static boolean inHealingState = false;
 	static boolean needToClearOutRallyBeforeDefending = false;
 
@@ -109,7 +108,7 @@ public class BotSoldier extends Bot {
 			}
 		}
 
-		if (health < 20) {
+		if (health < 30) {
 			inHealingState = true;
 		}
 		if (health > 60) {
@@ -399,12 +398,11 @@ public class BotSoldier extends Bot {
 	}
 
 	private static boolean doVoluntaryMicro(MapLocation rallyLoc, BotHQ.RallyGoal rallyGoal, Nav.Sneak sneak) throws GameActionException {
-		if (rallyGoal == BotHQ.RallyGoal.DEFEND && MessageBoard.COLLAPSE_TO_PASTR_SIGNAL.readInt() >= Clock.getRoundNum() - 1) return false;
-
 		switch (rallyGoal) {
 			case GATHER:
 			case DEFEND:
 				if (needToClearOutRallyBeforeDefending) return false;
+				if (MessageBoard.COLLAPSE_TO_PASTR_SIGNAL.readInt() >= Clock.getRoundNum() - 1) return false;
 				if (here.distanceSquaredTo(rallyLoc) <= 36) {
 					MapLocation closestEnemy = Util.closestNonHQ(visibleEnemies, rc);
 					if (closestEnemy == null) return false;
