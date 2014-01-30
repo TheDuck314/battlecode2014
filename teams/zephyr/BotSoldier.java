@@ -18,7 +18,7 @@ public class BotSoldier extends Bot {
 
 	protected static void init(RobotController theRC) throws GameActionException {
 		Bot.init(theRC);
-//		Debug.init(theRC, "bytecodes");
+//		Debug.init(theRC, "heal");
 		Nav.init(theRC);
 
 		spawnOrder = MessageBoard.SPAWN_COUNT.readInt();
@@ -108,12 +108,7 @@ public class BotSoldier extends Bot {
 			}
 		}
 
-		if (health < 30) {
-			inHealingState = true;
-		}
-		if (health > 60) {
-			inHealingState = false;
-		}
+		manageHealingState();
 
 		stance = chooseMicroStance(rallyLoc, rallyGoal);
 
@@ -348,6 +343,32 @@ public class BotSoldier extends Bot {
 		cachedNumEnemiesAttackingMoveDirs = null;
 	}
 
+	private static void manageHealingState() {
+		if (!tryingSelfDestruct) {
+			if (health < 30) {
+				inHealingState = true;
+//				Debug.indicate("heal", 0, "<20 health: going to healing state");
+			} else if (attackableEnemies.length > 0) {
+				// go into healing mode if we could get killed in the next turn
+				int numAttackers = 0;
+				for (int i = attackableEnemies.length; i-- > 0;) {
+					RobotInfo enemy = attackableEnemies[i];
+					if (enemy.actionDelay < 3 && enemy.type == RobotType.SOLDIER) numAttackers++;
+				}
+				if ((numAttackers + 1) * RobotType.SOLDIER.attackPower >= health) {
+//					Debug.indicate("heal", 0, "" + numAttackers + " attackers: going to healing state");
+					inHealingState = true;
+				} else {
+//					Debug.indicate("heal", 0, "not going to healing state: health = " + health + ", numAttackers = " + numAttackers);
+				}
+			}
+		}
+		if (health > 60) {
+			inHealingState = false;
+//			Debug.indicate("heal", 0, "leaving healing state");
+		}
+	}
+
 	private static boolean trySelfDestruct() throws GameActionException {
 		double maxDamage = GameConstants.SELF_DESTRUCT_BASE_DAMAGE + GameConstants.SELF_DESTRUCT_DAMAGE_FACTOR * health;
 		double damageDealt = 0;
@@ -431,22 +452,22 @@ public class BotSoldier extends Bot {
 	// obligatory micro is attacks or movements that we have to do because either we or a nearby ally is in combat
 	private static boolean doObligatoryMicro() throws GameActionException {
 		// Decide whether to try to move in for a self-destruct
-		if (Clock.getRoundNum() >= MessageBoard.SELF_DESTRUCT_LOCKOUT_ROUND.readInt()
-				|| rc.getRobot().getID() == MessageBoard.SELF_DESTRUCT_LOCKOUT_ID.readInt()) {
-			if (numNonConstructingSoldiersAttackingUs >= 1 && tryMoveForSelfDestruct()) {
-				// Debug.indicate("micro", 0, "trying for one-move self-destruct");
-				tryingSelfDestruct = true;
-				return true;
-			} else if (tryMoveForTwoMoveSelfDestruct()) {
-				// Debug.indicate("micro", 0, "trying for two-move self-destruct");
-				tryingSelfDestruct = true;
-				return true;
-			} else {
-				// Debug.indicate("micro", 1, "not trying self-destruct");
-				tryingSelfDestruct = false;
+		if (!inHealingState) {
+			if (Clock.getRoundNum() >= MessageBoard.SELF_DESTRUCT_LOCKOUT_ROUND.readInt()
+					|| rc.getRobot().getID() == MessageBoard.SELF_DESTRUCT_LOCKOUT_ID.readInt()) {
+				if (numNonConstructingSoldiersAttackingUs >= 1 && tryMoveForSelfDestruct()) {
+					// Debug.indicate("micro", 0, "trying for one-move self-destruct");
+					tryingSelfDestruct = true;
+					return true;
+				} else if (tryMoveForTwoMoveSelfDestruct()) {
+					// Debug.indicate("micro", 0, "trying for two-move self-destruct");
+					tryingSelfDestruct = true;
+					return true;
+				} else {
+					// Debug.indicate("micro", 1, "not trying self-destruct");
+					tryingSelfDestruct = false;
+				}
 			}
-		} else {
-			// Debug.indicate("micro", 0, "locked out of self-destruct");
 		}
 
 		if (numNonConstructingSoldiersAttackingUs >= 1) {
@@ -494,8 +515,12 @@ public class BotSoldier extends Bot {
 						attackAndRecord(singleEnemy);
 					}
 				}
-			} else if (stance == MicroStance.SAFE || (numNonConstructingSoldiersAttackingUs > maxAlliesAttackingEnemy && !guessIfFightIsWinning())) {
-				// We are getting doubled teamed too badly.
+			} else if (inHealingState || stance == MicroStance.SAFE
+					|| (numNonConstructingSoldiersAttackingUs > maxAlliesAttackingEnemy && (stance != MicroStance.AGGRESSIVE || !guessIfFightIsWinning()))) {
+				// Retreat if >= 2 enemies are attacking us and:
+				// - we are trying to heal, or
+				// - we are in a safe stance, or
+				// - we are getting double-teamed worse than the enemy and in either a defensive stance or in a losing overall fight
 				// Debug.indicate("micro", 0, "outnumbered: retreating");
 				retreatOrFight();
 			} else {
@@ -509,7 +534,7 @@ public class BotSoldier extends Bot {
 			// we can attack a soldier who is attacking them. Then we have to decide whether to move to attack such a soldier
 			// and if so which one. Actually, there is one other thing that is obligatory, which is to move to attack
 			// helpless enemies (buildings and constructing soldiers) if it is safe to do so.
-			if (stance != MicroStance.SAFE && !inHealingState) {
+			if (!inHealingState && stance != MicroStance.SAFE) {
 				MapLocation closestEnemySoldier = Util.closestNonConstructingSoldier(visibleEnemies, here);
 				if (closestEnemySoldier != null) {
 					// int numAlliesFighting = numOtherAlliedSoldiersInAttackRange(closestEnemySoldier);
@@ -554,7 +579,7 @@ public class BotSoldier extends Bot {
 				// Debug.indicate("heal", 1, "micro: low health, fleeing");
 				boolean tooClose = false;
 				for (RobotInfo enemy : visibleEnemies) {
-					if (enemy.type == RobotType.SOLDIER && !enemy.isConstructing && here.distanceSquaredTo(enemy.location) <= 20 && enemy.health > health) {
+					if (enemy.type == RobotType.SOLDIER && !enemy.isConstructing && here.distanceSquaredTo(enemy.location) <= 35 && enemy.health > health) {
 						tooClose = true;
 						break;
 					}
@@ -815,22 +840,38 @@ public class BotSoldier extends Bot {
 			if (!Bot.isInTheirHQAttackRange(dest) && rc.senseNearbyGameObjects(Robot.class, dest, 2, us).length == 0) {
 				// check if we think we can survive the charge
 				int numAttacksSuffered = 0;
+				double[] targetHealths = new double[99];
+				int numTargets = 0;
 				for (RobotInfo enemy : visibleEnemies) {
 					if (enemy.type != RobotType.SOLDIER || enemy.isConstructing) continue;
 					if (enemy.location.distanceSquaredTo(dest) <= RobotType.SOLDIER.attackRadiusMaxSquared) {
 						if (enemy.actionDelay < 2) numAttacksSuffered++;
+						if (enemy.location.isAdjacentTo(dest)) {
+							targetHealths[numTargets++] = enemy.health;
+						}
 					}
 				}
-				double requiredHealth = numAttacksSuffered * RobotType.SOLDIER.attackPower;
-				// Debug.indicate("selfdestruct", 1,
-				// String.format("considering one-move self-destruct: numVulnerableTurns = %d, numAttacksSuffered = %d,", 1, numAttacksSuffered));
-				// Debug.indicate("selfdestruct", 2, String.format("health = %f, requiredHealth = %f", health, requiredHealth));
-				if (health > requiredHealth) {
-					rc.move(dirs[bestDir]);
-					// Tell others not to go for a self-destruct until the round after we self-destruct
-					MessageBoard.SELF_DESTRUCT_LOCKOUT_ID.writeInt(rc.getRobot().getID());
-					MessageBoard.SELF_DESTRUCT_LOCKOUT_ROUND.writeInt(Clock.getRoundNum() + 2);
-					return true;
+				double damageTaken = numAttacksSuffered * RobotType.SOLDIER.attackPower;
+				if (health > damageTaken) {
+					double actualMaxDamage = GameConstants.SELF_DESTRUCT_BASE_DAMAGE + GameConstants.SELF_DESTRUCT_DAMAGE_FACTOR * (health - damageTaken);
+					double actualTotalDamageDealt = 0;
+					int numKills = 0;
+					for (int i = 0; i < numTargets; i++) {
+						double targetHealth = targetHealths[i];
+						if (targetHealth <= actualMaxDamage) {
+							actualTotalDamageDealt += targetHealth;
+							numKills++;
+						} else {
+							actualTotalDamageDealt += actualMaxDamage;
+						}
+					}
+					if (actualTotalDamageDealt > health && numKills > 0) {
+						rc.move(dirs[bestDir]);
+						// Tell others not to go for a self-destruct until the round after we self-destruct
+						MessageBoard.SELF_DESTRUCT_LOCKOUT_ID.writeInt(rc.getRobot().getID());
+						MessageBoard.SELF_DESTRUCT_LOCKOUT_ROUND.writeInt(Clock.getRoundNum() + 2);
+						return true;
+					}
 				}
 			}
 		}
@@ -924,7 +965,7 @@ public class BotSoldier extends Bot {
 						actualTotalDamageDealt += actualMaxDamage;
 					}
 				}
-				if (actualTotalDamageDealt >= 1.3 * health) {
+				if (actualTotalDamageDealt >= 1.3 * health && numKills > 0) {
 					// Debug.indicate("selfdestruct", 2,
 					// String.format("actualTotalDamageDealt = %f, numKills = %d: going for it", actualTotalDamageDealt, numKills));
 					rc.move(twoMoveSelfDestructPaths[bestPath][0]);
@@ -1168,23 +1209,25 @@ public class BotSoldier extends Bot {
 		// happen if an enemy engaged us after several diagonal moves. This could turn
 		// a losing 1v1 into a winning one! Also, if we can one-hit an enemy we should
 		// do so instead of retreating even if we take hits to do so
-		boolean canOneHitEnemy = false;
-		boolean enemyCanShootAtUs = false;
-		for (int i = attackableEnemies.length; i-- > 0;) {
-			RobotInfo enemy = attackableEnemies[i];
-			if (enemy.health <= RobotType.SOLDIER.attackPower) {
-				canOneHitEnemy = true;
-				break;
+		if (!inHealingState || attackableEnemies.length == 1) {
+			boolean canOneHitEnemy = false;
+			boolean enemyCanShootAtUs = false;
+			for (int i = attackableEnemies.length; i-- > 0;) {
+				RobotInfo enemy = attackableEnemies[i];
+				if (enemy.health <= RobotType.SOLDIER.attackPower) {
+					canOneHitEnemy = true;
+					break;
+				}
+				if (enemy.actionDelay < 3.0 && !enemy.isConstructing) {
+					enemyCanShootAtUs = true;
+				}
 			}
-			if (enemy.actionDelay < 3.0 && !enemy.isConstructing) {
-				enemyCanShootAtUs = true;
-			}
-		}
 
-		if (canOneHitEnemy || !enemyCanShootAtUs) {
-			// Debug.indicate("micro", 2, "parthian shot (canOneHitEnemy = " + canOneHitEnemy + ", enemyCanShootAtUs = " + enemyCanShootAtUs + ")");
-			attackANonConstructingSoldier();
-			return;
+			if (canOneHitEnemy || !enemyCanShootAtUs) {
+				// Debug.indicate("micro", 2, "parthian shot (canOneHitEnemy = " + canOneHitEnemy + ", enemyCanShootAtUs = " + enemyCanShootAtUs + ")");
+				attackANonConstructingSoldier();
+				return;
+			}
 		}
 
 		Direction dir = chooseRetreatDirection();
