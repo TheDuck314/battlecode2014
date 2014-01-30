@@ -865,7 +865,7 @@ public class BotSoldier extends Bot {
 							actualTotalDamageDealt += actualMaxDamage;
 						}
 					}
-					if (actualTotalDamageDealt > health && numKills > 0) {
+					if (actualTotalDamageDealt > health && (numKills > 0 || stance == MicroStance.AGGRESSIVE)) {
 						rc.move(dirs[bestDir]);
 						// Tell others not to go for a self-destruct until the round after we self-destruct
 						MessageBoard.SELF_DESTRUCT_LOCKOUT_ID.writeInt(rc.getRobot().getID());
@@ -965,7 +965,7 @@ public class BotSoldier extends Bot {
 						actualTotalDamageDealt += actualMaxDamage;
 					}
 				}
-				if (actualTotalDamageDealt >= 1.3 * health && numKills > 0) {
+				if (actualTotalDamageDealt >= 1.3 * health && (numKills > 0 || stance == MicroStance.AGGRESSIVE)) {
 					// Debug.indicate("selfdestruct", 2,
 					// String.format("actualTotalDamageDealt = %f, numKills = %d: going for it", actualTotalDamageDealt, numKills));
 					rc.move(twoMoveSelfDestructPaths[bestPath][0]);
