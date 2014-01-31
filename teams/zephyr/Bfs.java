@@ -44,8 +44,7 @@ public class Bfs {
 	// rrrr = round last updated
 	// xx = dest x coordinate
 	// yy = dest y coordinate
-	private static void writePageMetadata(int page, int roundLastUpdated, MapLocation dest, int priority, boolean finished)
-			throws GameActionException {
+	private static void writePageMetadata(int page, int roundLastUpdated, MapLocation dest, int priority, boolean finished) throws GameActionException {
 		int channel = pageMetadataBaseChannel + page;
 		int data = (finished ? 1000000000 : 0) + 100000000 * priority + 10000 * roundLastUpdated + MAP_HEIGHT * dest.x + dest.y;
 		rc.broadcast(channel, data);
@@ -178,12 +177,13 @@ public class Bfs {
 			// pop a location from the queue
 			MapLocation loc = locQueue[locQueueHead];
 			locQueueHead++;
+			if (loc.equals(Bot.ourHQ)) continue; // can't path through our HQ
 
 			int locX = loc.x;
 			int locY = loc.y;
 			for (int i = 8; i-- > 0;) {
-				int x = locX + dirsX[i]; 
-				int y = locY + dirsY[i]; 
+				int x = locX + dirsX[i];
+				int y = locY + dirsY[i];
 				if (x >= 0 && y >= 0 && x < mapWidth && y < mapHeight && !wasQueued[x][y]) {
 					MapLocation newLoc = new MapLocation(x, y);
 					if (rc.senseTerrainTile(newLoc) != TerrainTile.VOID && (destInSpawn || !Bot.isInTheirHQAttackRange(newLoc))) {

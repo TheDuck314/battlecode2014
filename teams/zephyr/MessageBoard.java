@@ -80,14 +80,14 @@ public enum MessageBoard {
 	}
 
 	public void writeMapLocation(MapLocation loc) throws GameActionException {
-		int data = (loc == null ? -999 : loc.x * GameConstants.MAP_MAX_WIDTH + loc.y);
+		int data = (loc == null ? -999 : loc.x * GameConstants.MAP_MAX_HEIGHT + loc.y);
 		writeInt(data);
 	}
 
 	public MapLocation readMapLocation() throws GameActionException {
 		int data = readInt();
 		if (data == -999) return null;
-		else return new MapLocation(data / GameConstants.MAP_MAX_WIDTH, data % GameConstants.MAP_MAX_WIDTH);
+		else return new MapLocation(data / GameConstants.MAP_MAX_HEIGHT, data % GameConstants.MAP_MAX_HEIGHT);
 	}
 
 	public void writeStrategy(Strategy s) throws GameActionException {

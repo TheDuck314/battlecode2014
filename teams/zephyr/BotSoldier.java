@@ -18,7 +18,7 @@ public class BotSoldier extends Bot {
 
 	protected static void init(RobotController theRC) throws GameActionException {
 		Bot.init(theRC);
-//		Debug.init(theRC, "heal");
+		// Debug.init(theRC, "heal");
 		Nav.init(theRC);
 
 		spawnOrder = MessageBoard.SPAWN_COUNT.readInt();
@@ -118,6 +118,11 @@ public class BotSoldier extends Bot {
 			}
 		}
 
+		// if(inHealingState) {
+		// Nav.goTo(ourHQ, Nav.Sneak.NO, Nav.Engage.NO, countNumEnemiesAttackingMoveDirs());
+		// return;
+		// }
+
 		if (tryBuildSomething()) {
 			return;
 		}
@@ -157,7 +162,8 @@ public class BotSoldier extends Bot {
 				}
 			}
 			if (visibleEnemies.length > 0) {
-				if (doVoluntaryMicro(rallyLoc, rallyGoal, sneak)) {
+				// if (doVoluntaryMicro(rallyLoc, rallyGoal, sneak)) {
+				if (doVoluntaryMicro(rallyLoc, rallyGoal, Nav.Sneak.NO)) {
 					return;
 				}
 			}
@@ -245,7 +251,6 @@ public class BotSoldier extends Bot {
 	}
 
 	private static boolean tryBuildSomething() throws GameActionException {
-
 		for (int i = 0; i < numPastrLocations; i++) {
 			MapLocation pastrLoc = bestPastrLocations[i];
 			if (here.equals(pastrLoc)) {
@@ -267,18 +272,28 @@ public class BotSoldier extends Bot {
 
 			if (here.isAdjacentTo(pastrLoc)) {
 				if (!Util.containsConstructingRobotOrNoiseTowerExceptAtLocation(rc.senseNearbyGameObjects(Robot.class, pastrLoc, 2, us), pastrLoc, rc)) {
-					// claim the tower build job if necessary
-					if (!MessageBoard.TOWER_BUILDER_ROBOT_IDS.checkIfIOwnAssignment(i)) {
-						MessageBoard.TOWER_BUILDER_ROBOT_IDS.claimAssignment(i);
-					}
-					// if we were going to build a pastr, relinquish our claim to that assignment
-					if (pastrBuildAssignmentIndex != -1) {
-						MessageBoard.PASTR_BUILDER_ROBOT_IDS.clearAssignment(pastrBuildAssignmentIndex);
-						pastrBuildAssignmentIndex = -1;
-					}
 					if (!areaIsSecureEnoughToBuild()) return false;
-					constructNoiseTower(pastrLoc);
-					return true;
+
+					Direction dirToPastr = here.directionTo(pastrLoc);
+					if (buildingHereBlocksAccess(dirToPastr) && rc.canMove(dirToPastr)) {
+						// There is an embarrassing failure mode where building the noise tower blocks access to the pastr location,
+						// and the pastr builder is not smart enough to route around the noise tower. We can try to ameliorate this by
+						// checking whether building here would block access to the pastr. If it would, and if the pastr builder is not
+						// in place yet, then we should move to the pastr location and become the pastr builder.
+						rc.move(dirToPastr);
+					} else {
+						// claim the tower build job if necessary
+						if (!MessageBoard.TOWER_BUILDER_ROBOT_IDS.checkIfIOwnAssignment(i)) {
+							MessageBoard.TOWER_BUILDER_ROBOT_IDS.claimAssignment(i);
+						}
+						// if we were going to build a pastr, relinquish our claim to that assignment
+						if (pastrBuildAssignmentIndex != -1) {
+							MessageBoard.PASTR_BUILDER_ROBOT_IDS.clearAssignment(pastrBuildAssignmentIndex);
+							pastrBuildAssignmentIndex = -1;
+						}
+						constructNoiseTower(pastrLoc);
+						return true;
+					}
 				}
 			}
 		}
@@ -307,6 +322,17 @@ public class BotSoldier extends Bot {
 		}
 
 		return false;
+	}
+
+	// assumes dest is adjacent to here
+	private static boolean buildingHereBlocksAccess(Direction dir) {
+		if (dir.isDiagonal()) {
+			return !Util.passable(rc.senseTerrainTile(here.add(dir.rotateLeft()))) && !Util.passable(rc.senseTerrainTile(here.add(dir.rotateRight())));
+		} else {
+			return !Util.passable(rc.senseTerrainTile(here.add(dir.rotateLeft().rotateLeft())))
+					&& !Util.passable(rc.senseTerrainTile(here.add(dir.rotateRight().rotateRight())));
+
+		}
 	}
 
 	private static void constructNoiseTower(MapLocation pastrLoc) throws GameActionException {
@@ -347,7 +373,7 @@ public class BotSoldier extends Bot {
 		if (!tryingSelfDestruct) {
 			if (health < 30) {
 				inHealingState = true;
-//				Debug.indicate("heal", 0, "<20 health: going to healing state");
+				// Debug.indicate("heal", 0, "<20 health: going to healing state");
 			} else if (attackableEnemies.length > 0) {
 				// go into healing mode if we could get killed in the next turn
 				int numAttackers = 0;
@@ -356,16 +382,16 @@ public class BotSoldier extends Bot {
 					if (enemy.actionDelay < 3 && enemy.type == RobotType.SOLDIER) numAttackers++;
 				}
 				if ((numAttackers + 1) * RobotType.SOLDIER.attackPower >= health) {
-//					Debug.indicate("heal", 0, "" + numAttackers + " attackers: going to healing state");
+					// Debug.indicate("heal", 0, "" + numAttackers + " attackers: going to healing state");
 					inHealingState = true;
 				} else {
-//					Debug.indicate("heal", 0, "not going to healing state: health = " + health + ", numAttackers = " + numAttackers);
+					// Debug.indicate("heal", 0, "not going to healing state: health = " + health + ", numAttackers = " + numAttackers);
 				}
 			}
 		}
-		if (health > 60) {
+		if (health > 80) {
 			inHealingState = false;
-//			Debug.indicate("heal", 0, "leaving healing state");
+			// Debug.indicate("heal", 0, "leaving healing state");
 		}
 	}
 

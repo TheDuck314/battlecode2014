@@ -69,7 +69,7 @@ public class BotHQ extends Bot {
 	// Used for pastr placement
 	static double[][] cowGrowth;
 	static double[][] computedPastrScores = null;
-	public static final int MAX_PASTR_LOCATIONS = 10;
+	public static final int MAX_PASTR_LOCATIONS = 2;
 	static MapLocation[] bestPastrLocations = new MapLocation[MAX_PASTR_LOCATIONS];
 	static int numPastrLocations = 0;
 
@@ -255,7 +255,7 @@ public class BotHQ extends Bot {
 	}
 
 	private static void directStrategy() throws GameActionException {
-		if (numAlliedPastrs > 0) MessageBoard.BUILD_PASTRS_FAST.writeBoolean(true);
+//		if (numAlliedPastrs > 0) MessageBoard.BUILD_PASTRS_FAST.writeBoolean(true);
 
 		switch (Strategy.active) {
 			case ONE_PASTR:
