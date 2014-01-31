@@ -154,17 +154,17 @@ public class BotSoldier extends Bot {
 					return;
 				}
 			}
+			if (visibleEnemies.length > 0) {
+				// if (doVoluntaryMicro(rallyLoc, rallyGoal, sneak)) {
+				if (doVoluntaryMicro(rallyLoc, rallyGoal, Nav.Sneak.NO)) {
+					return;
+				}
+			}
 			Nav.Sneak sneak = Nav.Sneak.NO;
 			for (int i = 0; i < numPastrLocations; i++) {
 				if (here.distanceSquaredTo(bestPastrLocations[i]) <= 49) {
 					sneak = Nav.Sneak.YES;
 					break;
-				}
-			}
-			if (visibleEnemies.length > 0) {
-				// if (doVoluntaryMicro(rallyLoc, rallyGoal, sneak)) {
-				if (doVoluntaryMicro(rallyLoc, rallyGoal, Nav.Sneak.NO)) {
-					return;
 				}
 			}
 			Nav.goTo(rallyLoc, sneak, navEngage, countNumEnemiesAttackingMoveDirs());
@@ -324,14 +324,18 @@ public class BotSoldier extends Bot {
 		return false;
 	}
 
-	// assumes dest is adjacent to here
+	// a bad hack for a stupid problem
 	private static boolean buildingHereBlocksAccess(Direction dir) {
 		if (dir.isDiagonal()) {
-			return !Util.passable(rc.senseTerrainTile(here.add(dir.rotateLeft()))) && !Util.passable(rc.senseTerrainTile(here.add(dir.rotateRight())));
+			boolean voidL1 = !Util.passable(rc.senseTerrainTile(here.add(dir.rotateLeft())));
+			boolean voidL3 = !Util.passable(rc.senseTerrainTile(here.add(dir.rotateLeft().rotateLeft().rotateLeft())));
+			boolean voidR1 = !Util.passable(rc.senseTerrainTile(here.add(dir.rotateRight())));
+			boolean voidR3 = !Util.passable(rc.senseTerrainTile(here.add(dir.rotateRight().rotateRight().rotateRight())));
+			return (voidL1 && voidR1) || (voidL1 && voidR3) || (voidL3 && voidR1) || (voidL3 && voidR3);
 		} else {
-			return !Util.passable(rc.senseTerrainTile(here.add(dir.rotateLeft().rotateLeft())))
-					&& !Util.passable(rc.senseTerrainTile(here.add(dir.rotateRight().rotateRight())));
-
+			boolean voidL2 = !Util.passable(rc.senseTerrainTile(here.add(dir.rotateLeft().rotateLeft())));
+			boolean voidR2 = !Util.passable(rc.senseTerrainTile(here.add(dir.rotateRight().rotateRight())));
+			return (voidL2 && voidR2);
 		}
 	}
 
@@ -371,7 +375,7 @@ public class BotSoldier extends Bot {
 
 	private static void manageHealingState() {
 		if (!tryingSelfDestruct) {
-			if (health < 30) {
+			if (health < 20) {
 				inHealingState = true;
 				// Debug.indicate("heal", 0, "<20 health: going to healing state");
 			} else if (attackableEnemies.length > 0) {
@@ -568,7 +572,8 @@ public class BotSoldier extends Bot {
 					int numAlliesFighting = numOtherNonSelfDestructingAlliedSoldiersAndBuildingsInAttackRange(closestEnemySoldier);
 					if (numAlliesFighting > 0) {
 						// Approach this enemy if doing so would expose us to at most numAlliesFighting enemies.
-						int maxEnemyExposure = numAlliesFighting + 1;
+						// int maxEnemyExposure = numAlliesFighting + 1;
+						int maxEnemyExposure = stance == MicroStance.AGGRESSIVE ? numAlliesFighting + 1 : Math.min(numAlliesFighting + 1, 3);
 						if (tryMoveTowardLocationWithMaxEnemyExposure(closestEnemySoldier, maxEnemyExposure, Nav.Sneak.NO)) {
 							// Debug.indicate("micro", 0, "moving to engage to assist ally");
 							return true;

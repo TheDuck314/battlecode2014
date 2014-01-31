@@ -171,13 +171,14 @@ public class Bfs {
 		int mapWidth = rc.getMapWidth();
 		int mapHeight = rc.getMapHeight();
 		MapLocation enemyHQ = rc.senseEnemyHQLocation();
-		boolean destInSpawn = dest.distanceSquaredTo(enemyHQ) <= 25;
+		int destDistSqToEnemyHQ = dest.distanceSquaredTo(enemyHQ);
+		boolean destInSpawn = destDistSqToEnemyHQ <= 25;
 
 		while (locQueueHead != locQueueTail && Clock.getBytecodeNum() < bytecodeLimit) {
 			// pop a location from the queue
 			MapLocation loc = locQueue[locQueueHead];
 			locQueueHead++;
-			if (loc.equals(Bot.ourHQ)) continue; // can't path through our HQ
+			if (loc.equals(Bot.ourHQ) && !loc.equals(dest)) continue; // can't path through our HQ unless HQ is the destination
 
 			int locX = loc.x;
 			int locY = loc.y;
@@ -186,7 +187,16 @@ public class Bfs {
 				int y = locY + dirsY[i];
 				if (x >= 0 && y >= 0 && x < mapWidth && y < mapHeight && !wasQueued[x][y]) {
 					MapLocation newLoc = new MapLocation(x, y);
-					if (rc.senseTerrainTile(newLoc) != TerrainTile.VOID && (destInSpawn || !Bot.isInTheirHQAttackRange(newLoc))) {
+					if (rc.senseTerrainTile(newLoc) != TerrainTile.VOID) {
+						if (destInSpawn) {
+							// if loc is in their HQ's attack range, we must move outward from the HQ
+							if (Bot.isInTheirHQAttackRange(loc)) {
+								if (Bot.theirHQ.distanceSquaredTo(newLoc) < Bot.theirHQ.distanceSquaredTo(loc)) continue;
+							}
+						} else {
+							// if loc is not in their HQ's attack range, avoid their HQ completely
+							if (Bot.isInTheirHQAttackRange(newLoc)) continue;
+						}
 						publishResult(page, newLoc, dest, dirs[i]);
 
 						// push newLoc onto queue

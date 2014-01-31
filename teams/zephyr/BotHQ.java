@@ -17,16 +17,19 @@ public class BotHQ extends Bot {
 
 	protected static void init(RobotController theRC) throws GameActionException {
 		Bot.init(theRC);
-		Debug.init(rc, "path");
+//		Debug.init(rc, "strat");
 
 		cowGrowth = rc.senseCowGrowth();
 		MessageBoard.setDefaultChannelValues();
 
 		// Precompute an obstacle-free central rally point
-		centralRallyPoint = new MapLocation(mapWidth / 2, mapHeight / 2);
+		hqMidpoint = new MapLocation((ourHQ.x + theirHQ.x) / 2, (ourHQ.y + theirHQ.y) / 2);
+
+		centralRallyPoint = hqMidpoint;
 		while (rc.senseTerrainTile(centralRallyPoint) == TerrainTile.VOID) {
 			centralRallyPoint = centralRallyPoint.add(centralRallyPoint.directionTo(ourHQ));
 		}
+
 	}
 
 	// Strategic info
@@ -41,6 +44,7 @@ public class BotHQ extends Bot {
 	static double theirMilk;
 
 	static MapLocation centralRallyPoint;
+	static MapLocation hqMidpoint;
 
 	// Properly choosing what to do in micro requires an understand of what the current goal is.
 	public enum RallyGoal {
@@ -108,43 +112,76 @@ public class BotHQ extends Bot {
 	private static void doFirstTurn() throws GameActionException {
 		spawnSoldier();
 
-		Strategy.active = pickStrategyByAnalyzingMap();
-		MessageBoard.STRATEGY.writeStrategy(Strategy.active);
+		// Strategize:
+
+		// Make preliminary strategy decision based on map size:
+		// * Rush on small maps
+		// * Build 1 or 2 pastrs on large maps
+		double mapSize = Math.hypot(mapWidth, mapHeight);
+		if (mapSize < 60) {
+			Strategy.active = Strategy.RUSH;
+			MessageBoard.STRATEGY.writeStrategy(Strategy.active);
+			Debug.indicate("strat", 0, "rush b/c map size is small (" + mapSize + ")");
+		} else {
+			Strategy.active = Strategy.SCATTER_HALF;
+			// Don't broadcast the strategy yet because it's still tentative.
+			Debug.indicate("strat", 0, "initially thinking scatter b/c map size is not small (" + mapSize + ")");
+		}
 
 		if (Strategy.active == Strategy.ONE_PASTR || Strategy.active == Strategy.ONE_PASTR_SUPPRESSOR || Strategy.active == Strategy.SCATTER
 				|| Strategy.active == Strategy.SCATTER_HALF || Strategy.active == Strategy.SCATTER_SUPPRESSOR
 				|| Strategy.active == Strategy.SCATTER_SUPPRESSOR_HALF) {
+			// We decided to build 1 or 2 pastrs. Figure out where to place the first one.
 			MapLocation repel = null;
 			boolean safe = true;
 			computePastrScores(repel, safe, true);
 			computeOneGoodPastrLocation();
-			// if (Strategy.active == Strategy.SCATTER || Strategy.active == Strategy.SCATTER_HALF || Strategy.active == Strategy.SCATTER_SUPPRESSOR ||
-			// Strategy.active == Strategy.SCATTER_SUPPRESSOR_HALF) {
-			// computeSecondGoodPastrLocation();
-			// }
-			broadcastBestPastrLocations();
+
+			// Figure out how cow-rich this area is
+			double cowsNearFirstPastr = countCowsNearLocation(bestPastrLocations[0]);
+
+			if (mapSize < 85 && (cowsNearFirstPastr <= 25 || bestPastrLocations[0].distanceSquaredTo(hqMidpoint) < 100)) {
+				// If it's a sucky location and the map is still kind of small, rush instead.
+				Strategy.active = Strategy.RUSH;
+				MessageBoard.STRATEGY.writeStrategy(Strategy.active);
+			} else {
+				MessageBoard.STRATEGY.writeStrategy(Strategy.active);
+				// If our first location is lucrative enough, see if we can reasonably build a second pastr
+				if (cowsNearFirstPastr > 40) {
+					if (Strategy.active == Strategy.SCATTER || Strategy.active == Strategy.SCATTER_HALF || Strategy.active == Strategy.SCATTER_SUPPRESSOR
+							|| Strategy.active == Strategy.SCATTER_SUPPRESSOR_HALF) {
+						tryComputeSecondGoodPastrLocation();
+					}
+				}
+				broadcastBestPastrLocations();
+			}
 		}
+
 		if (Strategy.active == Strategy.RUSH) {
 			// Send out a preliminary central rally point
 			rallyLoc = centralRallyPoint;
 			rallyGoal = RallyGoal.GATHER;
 			MessageBoard.RALLY_LOC.writeMapLocation(rallyLoc);
 			MessageBoard.RALLY_GOAL.writeRallyGoal(rallyGoal);
-			// Compute the pastr location we would eventually go to.
-			rushPastrRepel = null;
-			rushPastrSafe = true;
-			computePastrScores(rushPastrRepel, rushPastrSafe, false);
-			computeOneGoodPastrLocation();
-			// If the pastr location is near the centerline, rally there instead. This may save us from having to clear the enemy out
-			// of the pastr location in the future, because we will seize control of the location first
-			double distOurHQ = Math.sqrt(ourHQ.distanceSquaredTo(bestPastrLocations[0]));
-			double distTheirHQ = Math.sqrt(theirHQ.distanceSquaredTo(bestPastrLocations[0]));
-			if (Math.abs(distOurHQ - distTheirHQ) <= 5) {
-				centralRallyPoint = bestPastrLocations[0];
-				// centralRallyPoint = centralRallyPoint.add(centralRallyPoint.directionTo(theirHQ), 3);
-				rallyLoc = centralRallyPoint;
-				MessageBoard.RALLY_LOC.writeMapLocation(rallyLoc);
-			}
+			// Compute the pastr location we would eventually go to, if we didn't already
+//			if (numPastrLocations == 0) {
+//				rushPastrRepel = null;
+//				rushPastrSafe = true;
+//				computePastrScores(rushPastrRepel, rushPastrSafe, false);
+//				computeOneGoodPastrLocation();
+//			}
+//			Debug.indicate("strat", 1, "rush pastr loc: " + bestPastrLocations[0].toString() + "; cows nearby = "
+//					+ countCowsNearLocation(bestPastrLocations[0]));
+//			// If the pastr location is near the centerline, rally there instead. This may save us from having to clear the enemy out
+//			// of the pastr location in the future, because we will seize control of the location first
+//			double distOurHQ = Math.sqrt(ourHQ.distanceSquaredTo(bestPastrLocations[0]));
+//			double distTheirHQ = Math.sqrt(theirHQ.distanceSquaredTo(bestPastrLocations[0]));
+//			if (Math.abs(distOurHQ - distTheirHQ) <= 5) {
+//				centralRallyPoint = bestPastrLocations[0];
+//				// centralRallyPoint = centralRallyPoint.add(centralRallyPoint.directionTo(theirHQ), 3);
+//				rallyLoc = centralRallyPoint;
+//				MessageBoard.RALLY_LOC.writeMapLocation(rallyLoc);
+//			}
 		}
 	}
 
@@ -153,22 +190,6 @@ public class BotHQ extends Bot {
 			MessageBoard.BEST_PASTR_LOCATIONS.writeToMapLocationList(i, bestPastrLocations[i]);
 		}
 		MessageBoard.NUM_PASTR_LOCATIONS.writeInt(numPastrLocations);
-	}
-
-	private static Strategy pickStrategyByAnalyzingMap() throws GameActionException {
-		// return Strategy.PROXY_ATTACK;
-		// return Strategy.PROXY;
-		// return Strategy.ONE_PASTR;
-		// return Strategy.ONE_PASTR_SUPPRESSOR;
-		// return Strategy.SCATTER;
-		// return Strategy.SCATTER_SUPPRESSOR;
-		// return Strategy.RUSH;
-		double mapSize = Math.hypot(mapWidth, mapHeight);
-		if (mapSize < 60) {
-			return Strategy.RUSH;
-		} else {
-			return Strategy.SCATTER_SUPPRESSOR_HALF;
-		}
 	}
 
 	private static void updateStrategicInfo() throws GameActionException {
@@ -255,7 +276,7 @@ public class BotHQ extends Bot {
 	}
 
 	private static void directStrategy() throws GameActionException {
-//		if (numAlliedPastrs > 0) MessageBoard.BUILD_PASTRS_FAST.writeBoolean(true);
+		// if (numAlliedPastrs > 0) MessageBoard.BUILD_PASTRS_FAST.writeBoolean(true);
 
 		switch (Strategy.active) {
 			case ONE_PASTR:
@@ -503,11 +524,14 @@ public class BotHQ extends Bot {
 		return bestTarget;
 	}
 
+	static int choosePastrSearchSpacing() {
+		return mapWidth * mapHeight <= 2500 ? 3 : 5;
+	}
+
 	private static void computePastrScores(MapLocation repel, boolean safe, boolean avoidMapEdges) {
 		double mapSize = Math.hypot(mapWidth, mapHeight);
-		MapLocation mapCenter = new MapLocation(mapWidth / 2, mapHeight / 2);
 
-		int spacing = mapWidth * mapHeight < 2500 ? 3 : 5;
+		int spacing = choosePastrSearchSpacing();
 
 		double[][] pastrScores = new double[mapWidth][mapHeight];
 		for (int y = 2; y < mapHeight - 2; y += spacing) {
@@ -524,7 +548,7 @@ public class BotHQ extends Bot {
 							}
 						}
 						if (numCows >= 5) {
-							double distCenter = Math.sqrt(loc.distanceSquaredTo(mapCenter));
+							double distCenter = Math.sqrt(loc.distanceSquaredTo(hqMidpoint));
 							double score = numCows;
 							if (safe) {
 								// If we are playing it safe, avoid the center and try to keep near our HQ and away from theirs
@@ -557,9 +581,9 @@ public class BotHQ extends Bot {
 				} else {
 					pastrScores[x][y] = -999999; // don't make pastrs on void squares
 				}
-				// System.out.print(pastrScores[x][y] < 0 ? "XX " : String.format("%02d ", (int) pastrScores[x][y]));
+//				System.out.print(pastrScores[x][y] < 0 ? "XX " : String.format("%02d ", (int) pastrScores[x][y]));
 			}
-			// System.out.println();
+//			System.out.println();
 		}
 
 		computedPastrScores = pastrScores;
@@ -569,12 +593,12 @@ public class BotHQ extends Bot {
 		MapLocation bestPastrLocation = null;
 		double bestPastrScore = -999;
 
-		int spacing = mapWidth * mapHeight <= 2500 ? 3 : 5;
+		int spacing = choosePastrSearchSpacing();
 		for (int y = 2; y < mapHeight - 2; y += spacing) {
 			for (int x = 2; x < mapWidth - 2; x += spacing) {
 				if (computedPastrScores[x][y] > bestPastrScore) {
 					MapLocation loc = new MapLocation(x, y);
-					if (!Util.contains(ourPastrs, new MapLocation(x, y))) {
+					if (!Util.contains(ourPastrs, loc)) {
 						bestPastrScore = computedPastrScores[x][y];
 						bestPastrLocation = loc;
 					}
@@ -586,7 +610,7 @@ public class BotHQ extends Bot {
 		numPastrLocations = 1;
 	}
 
-	private static void computeSecondGoodPastrLocation() {
+	private static void tryComputeSecondGoodPastrLocation() {
 		MapLocation bestSecondPastrLocation = null;
 		double bestScore = -999;
 		MapLocation firstPastrLoc = bestPastrLocations[0];
@@ -594,11 +618,15 @@ public class BotHQ extends Bot {
 		int spacing = mapWidth * mapHeight <= 2500 ? 3 : 5;
 		for (int y = 2; y < mapHeight - 2; y += spacing) {
 			for (int x = 2; x < mapWidth - 2; x += spacing) {
-				if (computedPastrScores[x][y] > bestScore) {
+				double score = computedPastrScores[x][y];
+				if (score > bestScore) {
 					MapLocation loc = new MapLocation(x, y);
-					if (loc.distanceSquaredTo(firstPastrLoc) > 1600) {
-						if (!Util.contains(ourPastrs, new MapLocation(x, y))) {
-							bestScore = computedPastrScores[x][y];
+					double cowProduction = countCowsNearLocation(loc);
+					if (cowProduction < 30) continue; // minimum cow production for a second pastr
+					int minDistSq = cowProduction < 40 ? 2500 : 1600; // minimum separation from the first pastr
+					if (loc.distanceSquaredTo(firstPastrLoc) >= minDistSq) {
+						if (!Util.contains(ourPastrs, loc)) {
+							bestScore = score;
 							bestSecondPastrLocation = loc;
 						}
 					}
@@ -607,9 +635,29 @@ public class BotHQ extends Bot {
 		}
 
 		if (bestSecondPastrLocation != null) {
+			Debug.indicate(
+					"strat",
+					2,
+					"found a second pastr location at " + bestSecondPastrLocation.toString() + " with cow production "
+							+ countCowsNearLocation(bestSecondPastrLocation) + " at distance "
+							+ (int) Math.sqrt(bestSecondPastrLocation.distanceSquaredTo(firstPastrLoc)));
 			bestPastrLocations[1] = bestSecondPastrLocation;
 			numPastrLocations = 2;
 		}
+	}
+
+	private static double countCowsNearLocation(MapLocation loc) {
+		double ret = 0;
+		int xmin = loc.x - 2;
+		int xmax = loc.x + 2;
+		int ymin = loc.y - 2;
+		int ymax = loc.y + 2;
+		for (int x = xmin; x <= xmax; x++) {
+			for (int y = ymin; y <= ymax; y++) {
+				ret += cowGrowth[x][y];
+			}
+		}
+		return ret;
 	}
 
 	private static boolean attackEnemies() throws GameActionException {

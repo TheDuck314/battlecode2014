@@ -20,6 +20,7 @@ slumerville = DoYouEvenMilk
 tfk1 = quotes
 lucy = jalmad
 hipp0 = anim0rphs
+xiangcy = simplicissimus
 
 team003 - PaddleGoats
    1/21 - Rushing quite effectively. Watch game 5655 for some quiet, effective aggressive micro.
