@@ -44,7 +44,7 @@ public class BotSoldier extends Bot {
 	static RobotInfo[] attackableEnemies; // enemies within attack radius(10)
 	static int numNonConstructingSoldiersAttackingUs;
 	static int numVisibleNonConstructingEnemySoldiers;
-	static int[] cachedNumEnemiesAttackingMoveDirs; // computed in doObligatoryMicro
+	static int[] cachedNumEnemiesAttackingMoveDirs;
 	static boolean tryingSelfDestruct = false;
 	static boolean inHealingState = false;
 	static boolean needToClearOutRallyBeforeDefending = false;
@@ -468,7 +468,7 @@ public class BotSoldier extends Bot {
 			case HARRASS:
 				if (here.distanceSquaredTo(rallyLoc) <= 81) {
 					if (tryMoveTowardLocationWithMaxEnemyExposure(rallyLoc, 0, sneak)) {
-						Debug.indicate("micro", 0, "voluntary: moving safely toward rally in harrass mode");
+//						Debug.indicate("micro", 0, "voluntary: moving safely toward rally in harrass mode");
 					}
 					return true;
 				}

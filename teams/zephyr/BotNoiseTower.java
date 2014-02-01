@@ -174,52 +174,52 @@ public class BotNoiseTower extends Bot {
 		return loc.x < -W || loc.y < -W || loc.x >= mapWidth + W || loc.y >= mapHeight + W;
 	}
 
-	static MapLocation smartLoc = null;
-	static Direction nextStartDir = Direction.NORTH;
-
-	static int[] edgesX = new int[] { -2, -1, 0, 1, 2, -3, -2, 2, 3, -3, 3, -3, 3, -3, 3, -3, -2, 2, 3, -2, -1, 0, 1, 2 };
-	static int[] edgesY = new int[] { 3, 3, 3, 3, 3, 2, 2, 2, 2, 1, 1, 0, 0, -1, -1, -2, -2, -2, -2, -3, -3, -3, -3, -3 };
-	static int edgeTrimIndex = 0;
-
-	private static void herdTowardPastrSmart() throws GameActionException {
-		if (smartLoc == null || smartLoc.distanceSquaredTo(pastr) <= GameConstants.PASTR_RANGE) {
-			smartLoc = pastr.add(nextStartDir, nextStartDir.isDiagonal() ? maxDiagonalRadius - 3 : maxOrthogonalRadius - 3);
-			nextStartDir = nextStartDir.rotateRight();
-			edgeTrimIndex = edgesX.length - 1;
-			// Debug.indicate("herd", 0, "starting new spoke");
-		}
-
-		while (edgeTrimIndex >= 0) {
-			MapLocation edge = new MapLocation(pastr.x + edgesX[edgeTrimIndex], pastr.y + edgesY[edgeTrimIndex]);
-			edgeTrimIndex--;
-			if (isOnMap(edge) && rc.canSenseSquare(edge) && rc.senseCowsAtLocation(edge) > 1000) {
-				MapLocation targetSquare = edge.add(pastr.directionTo(edge));
-				if (rc.canAttackSquare(targetSquare)) {
-					rc.attackSquareLight(targetSquare);
-					return;
-				}
-			}
-		}
-
-		while (!rc.canAttackSquare(smartLoc) || !isOnMap(smartLoc)) {
-			Direction moveDir = smartLoc.directionTo(pastr);
-			Direction computedMoveDir = HerdPattern.readHerdDir(smartLoc, rc);
-			if (computedMoveDir != null) moveDir = computedMoveDir;
-			smartLoc = smartLoc.add(moveDir);
-			if (here.distanceSquaredTo(smartLoc) > RobotType.NOISETOWER.attackRadiusMaxSquared) {
-				smartLoc = null;
-				return;
-			}
-			if (smartLoc.equals(pastr)) return; // otherwise in some situations we could get an infinite loop
-		}
-
-		Direction herdDir = smartLoc.directionTo(pastr);
-		Direction computedHerdDir = HerdPattern.readHerdDir(smartLoc, rc);
-		if (computedHerdDir != null) herdDir = computedHerdDir;
-
-		MapLocation targetSquare = smartLoc.add(Util.opposite(herdDir), 3);
-		// Debug.indicate("herd", 2, "want to attack " + targetSquare.toString());
-		if (rc.canAttackSquare(targetSquare)) rc.attackSquare(targetSquare);
-		smartLoc = smartLoc.add(herdDir);
-	}
+//	static MapLocation smartLoc = null;
+//	static Direction nextStartDir = Direction.NORTH;
+//
+//	static int[] edgesX = new int[] { -2, -1, 0, 1, 2, -3, -2, 2, 3, -3, 3, -3, 3, -3, 3, -3, -2, 2, 3, -2, -1, 0, 1, 2 };
+//	static int[] edgesY = new int[] { 3, 3, 3, 3, 3, 2, 2, 2, 2, 1, 1, 0, 0, -1, -1, -2, -2, -2, -2, -3, -3, -3, -3, -3 };
+//	static int edgeTrimIndex = 0;
+//
+//	private static void herdTowardPastrSmart() throws GameActionException {
+//		if (smartLoc == null || smartLoc.distanceSquaredTo(pastr) <= GameConstants.PASTR_RANGE) {
+//			smartLoc = pastr.add(nextStartDir, nextStartDir.isDiagonal() ? maxDiagonalRadius - 3 : maxOrthogonalRadius - 3);
+//			nextStartDir = nextStartDir.rotateRight();
+//			edgeTrimIndex = edgesX.length - 1;
+//			// Debug.indicate("herd", 0, "starting new spoke");
+//		}
+//
+//		while (edgeTrimIndex >= 0) {
+//			MapLocation edge = new MapLocation(pastr.x + edgesX[edgeTrimIndex], pastr.y + edgesY[edgeTrimIndex]);
+//			edgeTrimIndex--;
+//			if (isOnMap(edge) && rc.canSenseSquare(edge) && rc.senseCowsAtLocation(edge) > 1000) {
+//				MapLocation targetSquare = edge.add(pastr.directionTo(edge));
+//				if (rc.canAttackSquare(targetSquare)) {
+//					rc.attackSquareLight(targetSquare);
+//					return;
+//				}
+//			}
+//		}
+//
+//		while (!rc.canAttackSquare(smartLoc) || !isOnMap(smartLoc)) {
+//			Direction moveDir = smartLoc.directionTo(pastr);
+//			Direction computedMoveDir = HerdPattern.readHerdDir(smartLoc, rc);
+//			if (computedMoveDir != null) moveDir = computedMoveDir;
+//			smartLoc = smartLoc.add(moveDir);
+//			if (here.distanceSquaredTo(smartLoc) > RobotType.NOISETOWER.attackRadiusMaxSquared) {
+//				smartLoc = null;
+//				return;
+//			}
+//			if (smartLoc.equals(pastr)) return; // otherwise in some situations we could get an infinite loop
+//		}
+//
+//		Direction herdDir = smartLoc.directionTo(pastr);
+//		Direction computedHerdDir = HerdPattern.readHerdDir(smartLoc, rc);
+//		if (computedHerdDir != null) herdDir = computedHerdDir;
+//
+//		MapLocation targetSquare = smartLoc.add(Util.opposite(herdDir), 3);
+//		// Debug.indicate("herd", 2, "want to attack " + targetSquare.toString());
+//		if (rc.canAttackSquare(targetSquare)) rc.attackSquare(targetSquare);
+//		smartLoc = smartLoc.add(herdDir);
+//	}
 }

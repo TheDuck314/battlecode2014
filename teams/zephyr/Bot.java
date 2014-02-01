@@ -19,7 +19,6 @@ public class Bot {
 		mapWidth = rc.getMapWidth();
 		mapHeight = rc.getMapHeight();
 		
-		FastRandom.init();
 		MessageBoard.init(theRC);
 		Bfs.init(theRC);
 	}
