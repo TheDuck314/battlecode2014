@@ -18,7 +18,7 @@ public class BotSoldier extends Bot {
 
 	protected static void init(RobotController theRC) throws GameActionException {
 		Bot.init(theRC);
-		// Debug.init(theRC, "heal");
+//		Debug.init(theRC, "selfdestruct");
 		Nav.init(theRC);
 
 		spawnOrder = MessageBoard.SPAWN_COUNT.readInt();
@@ -46,6 +46,7 @@ public class BotSoldier extends Bot {
 	static int numVisibleNonConstructingEnemySoldiers;
 	static int[] cachedNumEnemiesAttackingMoveDirs;
 	static boolean tryingSelfDestruct = false;
+	static boolean tryOneMoveBeforeSelfDestructing = false;
 	static boolean inHealingState = false;
 	static boolean needToClearOutRallyBeforeDefending = false;
 
@@ -63,7 +64,7 @@ public class BotSoldier extends Bot {
 		health = rc.getHealth();
 		if (!rc.isActive()) {
 			// can self-destruct even with large actiondelay:
-			if (tryingSelfDestruct) {
+			if (tryingSelfDestruct && !tryOneMoveBeforeSelfDestructing) {
 				updateEnemyData();
 				trySelfDestruct();
 			}
@@ -87,6 +88,12 @@ public class BotSoldier extends Bot {
 		updateEnemyData();
 
 		if (tryingSelfDestruct) {
+			if (tryOneMoveBeforeSelfDestructing) {
+				if (tryMoveForSelfDestruct()) {
+					tryOneMoveBeforeSelfDestructing = false;
+					return;
+				}
+			}
 			if (trySelfDestruct()) return;
 		}
 
@@ -468,7 +475,7 @@ public class BotSoldier extends Bot {
 			case HARRASS:
 				if (here.distanceSquaredTo(rallyLoc) <= 81) {
 					if (tryMoveTowardLocationWithMaxEnemyExposure(rallyLoc, 0, sneak)) {
-//						Debug.indicate("micro", 0, "voluntary: moving safely toward rally in harrass mode");
+						// Debug.indicate("micro", 0, "voluntary: moving safely toward rally in harrass mode");
 					}
 					return true;
 				}
@@ -482,23 +489,25 @@ public class BotSoldier extends Bot {
 	// obligatory micro is attacks or movements that we have to do because either we or a nearby ally is in combat
 	private static boolean doObligatoryMicro() throws GameActionException {
 		// Decide whether to try to move in for a self-destruct
-		if (!inHealingState) {
-			if (Clock.getRoundNum() >= MessageBoard.SELF_DESTRUCT_LOCKOUT_ROUND.readInt()
-					|| rc.getRobot().getID() == MessageBoard.SELF_DESTRUCT_LOCKOUT_ID.readInt()) {
-				if (numNonConstructingSoldiersAttackingUs >= 1 && tryMoveForSelfDestruct()) {
-					// Debug.indicate("micro", 0, "trying for one-move self-destruct");
-					tryingSelfDestruct = true;
-					return true;
-				} else if (tryMoveForTwoMoveSelfDestruct()) {
-					// Debug.indicate("micro", 0, "trying for two-move self-destruct");
-					tryingSelfDestruct = true;
-					return true;
-				} else {
-					// Debug.indicate("micro", 1, "not trying self-destruct");
-					tryingSelfDestruct = false;
-				}
+		tryOneMoveBeforeSelfDestructing = false;
+		// if (tryingSelfDestruct || !inHealingState) {
+		if (Clock.getRoundNum() >= MessageBoard.SELF_DESTRUCT_LOCKOUT_ROUND.readInt()
+				|| rc.getRobot().getID() == MessageBoard.SELF_DESTRUCT_LOCKOUT_ID.readInt()) {
+			if (numNonConstructingSoldiersAttackingUs >= 1 && tryMoveForSelfDestruct()) {
+				// Debug.indicate("micro", 0, "trying for one-move self-destruct");
+				tryingSelfDestruct = true;
+				return true;
+			} else if (tryMoveForTwoMoveSelfDestruct()) {
+				// Debug.indicate("micro", 0, "trying for two-move self-destruct");
+				tryingSelfDestruct = true;
+				tryOneMoveBeforeSelfDestructing = true;
+				return true;
+			} else {
+				// Debug.indicate("micro", 1, "not trying self-destruct");
+				tryingSelfDestruct = false;
 			}
 		}
+		// }
 
 		if (numNonConstructingSoldiersAttackingUs >= 1) {
 			if (fleeSelfDestruct()) {
@@ -843,6 +852,9 @@ public class BotSoldier extends Bot {
                                                         {{},                {},                {},                {},                {},                {},                {},                }};
 	// @formatter:on
 
+	private static Direction[] sortedOneMoveSelfDestructDirs = { Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST, Direction.NORTH_EAST,
+			Direction.SOUTH_EAST, Direction.SOUTH_WEST, Direction.NORTH_WEST };
+
 	private static boolean tryMoveForSelfDestruct() throws GameActionException {
 		double maxDamage = GameConstants.SELF_DESTRUCT_BASE_DAMAGE + GameConstants.SELF_DESTRUCT_DAMAGE_FACTOR * health;
 		double[] moveScores = new double[8];
@@ -857,17 +869,18 @@ public class BotSoldier extends Bot {
 			// }
 		}
 		double bestScore = 1.5 * health;
-		int bestDir = -1;
-		Direction[] dirs = Direction.values();
-		for (int i = 8; i-- > 0;) {
-			if (moveScores[i] > bestScore && rc.canMove(dirs[i])) {
-				bestScore = moveScores[i];
-				bestDir = i;
+		Direction bestDir = null;
+		for (Direction dir : sortedOneMoveSelfDestructDirs) {
+			int ordinal = dir.ordinal();
+			if (moveScores[ordinal] > bestScore && rc.canMove(dir)) {
+				bestScore = moveScores[ordinal];
+				bestDir = dir;
 			}
 		}
-		if (bestDir != -1) {
+		if (bestDir != null) {
+//			Debug.indicate("selfdestruct", 1, "nonnull bestDir = " + bestDir.toString());
 			// make sure we won't hit an ally or step into HQ attack range
-			MapLocation dest = here.add(dirs[bestDir]);
+			MapLocation dest = here.add(bestDir);
 			if (!Bot.isInTheirHQAttackRange(dest) && rc.senseNearbyGameObjects(Robot.class, dest, 2, us).length == 0) {
 				// check if we think we can survive the charge
 				int numAttacksSuffered = 0;
@@ -897,14 +910,23 @@ public class BotSoldier extends Bot {
 						}
 					}
 					if (actualTotalDamageDealt > health && (numKills > 0 || stance == MicroStance.AGGRESSIVE)) {
-						rc.move(dirs[bestDir]);
+						rc.move(bestDir);
 						// Tell others not to go for a self-destruct until the round after we self-destruct
 						MessageBoard.SELF_DESTRUCT_LOCKOUT_ID.writeInt(rc.getRobot().getID());
 						MessageBoard.SELF_DESTRUCT_LOCKOUT_ROUND.writeInt(Clock.getRoundNum() + 2);
+//						Debug.indicate("selfdestruct", 2, "1move: going for it");
 						return true;
+					} else {
+//						Debug.indicate("selfdestruct", 2, "1move: no kill or too little damage");
 					}
+				} else {
+//					Debug.indicate("selfdestruct", 2, "1move: would get shot down");
 				}
+			} else {
+//				Debug.indicate("selfdestruct", 2, "1move: dest in their HQ or next to ally");
 			}
+		} else {
+//			Debug.indicate("selfdestruct", 2, "1move: no bestDir");
 		}
 		return false;
 	}
@@ -953,7 +975,7 @@ public class BotSoldier extends Bot {
 			Direction move2 = path[1];
 			MapLocation dest = here.add(move1).add(move2);
 
-			if (Bot.isInTheirHQAttackRange(dest)) return false;
+			if (Bot.isInTheirHQAttackRange(dest) || rc.senseNearbyGameObjects(Robot.class, dest, 2, us).length != 0) return false;
 
 			double totalActionDelay = twoMoveSelfDestructPathActionDelay[bestPath];
 			if (rc.senseTerrainTile(here) == TerrainTile.ROAD) totalActionDelay *= GameConstants.ROAD_ACTION_DELAY_FACTOR;
@@ -997,9 +1019,10 @@ public class BotSoldier extends Bot {
 					}
 				}
 				if (actualTotalDamageDealt >= 1.3 * health && (numKills > 0 || stance == MicroStance.AGGRESSIVE)) {
-					// Debug.indicate("selfdestruct", 2,
-					// String.format("actualTotalDamageDealt = %f, numKills = %d: going for it", actualTotalDamageDealt, numKills));
-					rc.move(twoMoveSelfDestructPaths[bestPath][0]);
+//					Debug.indicate("selfdestruct", 0, "going for 2move");
+//					Debug.indicate("selfdestruct", 2,
+//							String.format("actualTotalDamageDealt = %f, numKills = %d: going for it", actualTotalDamageDealt, numKills));
+					rc.move(move1);
 					// Tell others not to go for a self-destruct right now
 					MessageBoard.SELF_DESTRUCT_LOCKOUT_ID.writeInt(rc.getRobot().getID());
 					MessageBoard.SELF_DESTRUCT_LOCKOUT_ROUND.writeInt(Clock.getRoundNum() + 2);
