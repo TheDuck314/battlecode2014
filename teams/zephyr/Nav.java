@@ -258,20 +258,20 @@ public class Nav {
 
 		if (tryMoveBfs(here)) {
 			bugState = BugState.DIRECT; // reset bug
-			Debug.indicate("nav", 0, "using bfs");
+//			Debug.indicate("nav", 0, "using bfs");
 			return;
 		}
 
-		Debug.indicate("nav", 0, "using bug");
+//		Debug.indicate("nav", 0, "using bug");
 		bugTo(dest);
 	}
 
 	private static void move(Direction dir) throws GameActionException {
 		if (sneak) {
-			Debug.indicate("sneak", 1, "Nav.move sneaking");
+//			Debug.indicate("sneak", 1, "Nav.move sneaking");
 			rc.sneak(dir);
 		} else {
-			Debug.indicate("sneak", 1, "Nav.move moving regularly");
+//			Debug.indicate("sneak", 1, "Nav.move moving regularly");
 			rc.move(dir);
 		}
 	}

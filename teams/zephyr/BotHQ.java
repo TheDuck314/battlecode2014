@@ -121,11 +121,11 @@ public class BotHQ extends Bot {
 		if (mapSize < 60) {
 			Strategy.active = Strategy.RUSH;
 			MessageBoard.STRATEGY.writeStrategy(Strategy.active);
-			Debug.indicate("strat", 0, "rush b/c map size is small (" + mapSize + ")");
+//			Debug.indicate("strat", 0, "rush b/c map size is small (" + mapSize + ")");
 		} else {
 			Strategy.active = Strategy.SCATTER_HALF;
 			// Don't broadcast the strategy yet because it's still tentative.
-			Debug.indicate("strat", 0, "initially thinking scatter b/c map size is not small (" + mapSize + ")");
+//			Debug.indicate("strat", 0, "initially thinking scatter b/c map size is not small (" + mapSize + ")");
 		}
 
 		if (Strategy.active == Strategy.ONE_PASTR || Strategy.active == Strategy.ONE_PASTR_SUPPRESSOR || Strategy.active == Strategy.SCATTER
@@ -140,11 +140,21 @@ public class BotHQ extends Bot {
 			// Figure out how cow-rich this area is
 			double cowsNearFirstPastr = countCowsNearLocation(bestPastrLocations[0]);
 
-			if (mapSize < 85 && (cowsNearFirstPastr <= 25 || bestPastrLocations[0].distanceSquaredTo(hqMidpoint) < 100)) {
+			boolean pastrLocationSucks = false;
+			if (mapSize < 85) {
+				if (cowsNearFirstPastr <= 25 || bestPastrLocations[0].distanceSquaredTo(hqMidpoint) < 100) pastrLocationSucks = true;
+				if (bestPastrLocations[0].distanceSquaredTo(theirHQ) <= 400) pastrLocationSucks = true;
+				if (cowsNearFirstPastr < 50 && bestPastrLocations[0].distanceSquaredTo(theirHQ) <= 1600) pastrLocationSucks = true;
+			}
+
+			if (pastrLocationSucks) {
 				// If it's a sucky location and the map is still kind of small, rush instead.
 				Strategy.active = Strategy.RUSH;
 				MessageBoard.STRATEGY.writeStrategy(Strategy.active);
 			} else {
+//				Debug.indicate("strat", 0,
+//						"scatter: dist between enemy hq and our first pastr = " + Math.sqrt(bestPastrLocations[0].distanceSquaredTo(theirHQ)));
+//				Debug.indicate("strat", 1, "cowsNearFirstPastr = " + cowsNearFirstPastr);
 				MessageBoard.STRATEGY.writeStrategy(Strategy.active);
 				// If our first location is lucrative enough, see if we can reasonably build a second pastr
 				if (cowsNearFirstPastr > 40) {
@@ -164,24 +174,24 @@ public class BotHQ extends Bot {
 			MessageBoard.RALLY_LOC.writeMapLocation(rallyLoc);
 			MessageBoard.RALLY_GOAL.writeRallyGoal(rallyGoal);
 			// Compute the pastr location we would eventually go to, if we didn't already
-//			if (numPastrLocations == 0) {
-//				rushPastrRepel = null;
-//				rushPastrSafe = true;
-//				computePastrScores(rushPastrRepel, rushPastrSafe, false);
-//				computeOneGoodPastrLocation();
-//			}
-//			Debug.indicate("strat", 1, "rush pastr loc: " + bestPastrLocations[0].toString() + "; cows nearby = "
-//					+ countCowsNearLocation(bestPastrLocations[0]));
-//			// If the pastr location is near the centerline, rally there instead. This may save us from having to clear the enemy out
-//			// of the pastr location in the future, because we will seize control of the location first
-//			double distOurHQ = Math.sqrt(ourHQ.distanceSquaredTo(bestPastrLocations[0]));
-//			double distTheirHQ = Math.sqrt(theirHQ.distanceSquaredTo(bestPastrLocations[0]));
-//			if (Math.abs(distOurHQ - distTheirHQ) <= 5) {
-//				centralRallyPoint = bestPastrLocations[0];
-//				// centralRallyPoint = centralRallyPoint.add(centralRallyPoint.directionTo(theirHQ), 3);
-//				rallyLoc = centralRallyPoint;
-//				MessageBoard.RALLY_LOC.writeMapLocation(rallyLoc);
-//			}
+			// if (numPastrLocations == 0) {
+			// rushPastrRepel = null;
+			// rushPastrSafe = true;
+			// computePastrScores(rushPastrRepel, rushPastrSafe, false);
+			// computeOneGoodPastrLocation();
+			// }
+			// Debug.indicate("strat", 1, "rush pastr loc: " + bestPastrLocations[0].toString() + "; cows nearby = "
+			// + countCowsNearLocation(bestPastrLocations[0]));
+			// // If the pastr location is near the centerline, rally there instead. This may save us from having to clear the enemy out
+			// // of the pastr location in the future, because we will seize control of the location first
+			// double distOurHQ = Math.sqrt(ourHQ.distanceSquaredTo(bestPastrLocations[0]));
+			// double distTheirHQ = Math.sqrt(theirHQ.distanceSquaredTo(bestPastrLocations[0]));
+			// if (Math.abs(distOurHQ - distTheirHQ) <= 5) {
+			// centralRallyPoint = bestPastrLocations[0];
+			// // centralRallyPoint = centralRallyPoint.add(centralRallyPoint.directionTo(theirHQ), 3);
+			// rallyLoc = centralRallyPoint;
+			// MessageBoard.RALLY_LOC.writeMapLocation(rallyLoc);
+			// }
 		}
 	}
 
@@ -581,9 +591,9 @@ public class BotHQ extends Bot {
 				} else {
 					pastrScores[x][y] = -999999; // don't make pastrs on void squares
 				}
-//				System.out.print(pastrScores[x][y] < 0 ? "XX " : String.format("%02d ", (int) pastrScores[x][y]));
+				// System.out.print(pastrScores[x][y] < 0 ? "XX " : String.format("%02d ", (int) pastrScores[x][y]));
 			}
-//			System.out.println();
+			// System.out.println();
 		}
 
 		computedPastrScores = pastrScores;
@@ -635,12 +645,12 @@ public class BotHQ extends Bot {
 		}
 
 		if (bestSecondPastrLocation != null) {
-			Debug.indicate(
-					"strat",
-					2,
-					"found a second pastr location at " + bestSecondPastrLocation.toString() + " with cow production "
-							+ countCowsNearLocation(bestSecondPastrLocation) + " at distance "
-							+ (int) Math.sqrt(bestSecondPastrLocation.distanceSquaredTo(firstPastrLoc)));
+			// Debug.indicate(
+			// "strat",
+			// 2,
+			// "found a second pastr location at " + bestSecondPastrLocation.toString() + " with cow production "
+			// + countCowsNearLocation(bestSecondPastrLocation) + " at distance "
+			// + (int) Math.sqrt(bestSecondPastrLocation.distanceSquaredTo(firstPastrLoc)));
 			bestPastrLocations[1] = bestSecondPastrLocation;
 			numPastrLocations = 2;
 		}
