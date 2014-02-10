@@ -20,7 +20,8 @@ A few of other teams have published their bots:
 
 * [PaddleGoats](https://github.com/u--/PaddleGoats2014), a finalist
 * [anim0rphs](https://bitbucket.org/jdshen/battlecode-2014), a finalist
-* [@Deprecated](http://math.columbia.edu/~dgulotta/bc2014.jar)
+* [Oxg](https://github.com/0xg/Battlecode-2014), a strong team that almost qualified for the final tournament
+* [@Deprecated](http://math.columbia.edu/~dgulotta/bc2014.jar), a strong team that was ineligible for the final tournament
 * [TooMuchSwagException](https://bitbucket.org/Goldob/battlecode2014)
 * [FireAnts](https://bitbucket.org/schueppert/battlecode2014/)
 * [CATTLEBODE](https://github.com/optimuscoprime/battlecode2014)
