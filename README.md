@@ -16,7 +16,7 @@ My sprint tournament submission is "sprint" and my seeding tournament submission
 
 #### Other Battlecode 2014 repos
 
-A few of other teams have published their bots:
+A few other teams have published their bots:
 
 * [PaddleGoats](https://github.com/u--/PaddleGoats2014), a finalist
 * [anim0rphs](https://bitbucket.org/jdshen/battlecode-2014), a finalist
